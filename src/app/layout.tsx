@@ -6,6 +6,13 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeProvider } from "@/components/theme-provider";
+import {
+  ClerkProvider,
+  Show,
+  SignInButton,
+  SignUpButton,
+  UserButton,
+} from "@clerk/nextjs";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -23,7 +30,6 @@ export const metadata: Metadata = {
   title: "GetHired",
   description:
     "A platform that i am creating to help just myself and get hired, but if you want to use it, feel free to do so.",
-  icons: "favicon.svg",
 };
 
 export default function RootLayout({
@@ -45,19 +51,32 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="light"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <TooltipProvider>
-            <SidebarProvider>
-              <AppSidebar variant="floating" />
-              <SidebarInset>{children}</SidebarInset>
-            </SidebarProvider>
-          </TooltipProvider>
-        </ThemeProvider>
+        <ClerkProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="light"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <TooltipProvider>
+              <SidebarProvider>
+                <AppSidebar variant="floating" />
+                <SidebarInset>
+                  <header className="flex h-14 shrink-0 items-center justify-end gap-2 border-b px-4">
+                    <Show when="signed-out">
+                      <SignInButton />
+                      <SignUpButton />
+                    </Show>
+                    <Show when="signed-in">
+                      <UserButton />
+                    </Show>
+                  </header>
+                  {children}
+                </SidebarInset>
+              </SidebarProvider>
+            </TooltipProvider>
+          </ThemeProvider>
+        </ClerkProvider>
       </body>
     </html>
   );
