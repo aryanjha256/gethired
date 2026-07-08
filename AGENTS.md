@@ -23,4 +23,7 @@ we will keep a handoff at root as handoff.md (create if not one), to udpate the 
 - dont try to run server, as we may have it already running.
 - our goal is not to be flashy in terms of visual direction.
 - no new packages installation unless approved (ask if needed).
+- for table, we have table from shadcn just basic one, but we also have tanstack table installed, we need to create a data-table type of abstraction over it using tanstack table and table component from shadcn so we make it more abstracted and reusable
+- this abstraction may be needed to done for some other components like combobox or so, so that we can use it in a more declartive way
+- we also have zod and react hook form installed, can create some abstraction if needed or use it as needed.
 -
