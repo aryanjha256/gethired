@@ -19,6 +19,7 @@ export const metadata: Metadata = {
   title: "GetHired",
   description:
     "A platform that i am creating to help just myself and get hired, but if you want to use it, feel free to do so.",
+  icons: "favicon.svg",
 };
 
 export default function RootLayout({
