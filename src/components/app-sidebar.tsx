@@ -1,8 +1,8 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { HugeiconsIcon } from "@hugeicons/react"
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Bookmark01Icon,
   Briefcase01Icon,
@@ -11,7 +11,7 @@ import {
   DashboardSquare01Icon,
   Settings01Icon,
   Target01Icon,
-} from "@hugeicons/core-free-icons"
+} from "@hugeicons/core-free-icons";
 
 import {
   Sidebar,
@@ -25,7 +25,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
-} from "@/components/ui/sidebar"
+} from "@/components/ui/sidebar";
+import Image from "next/image";
 
 const navMain = [
   { title: "Dashboard", url: "/", icon: DashboardSquare01Icon },
@@ -33,37 +34,19 @@ const navMain = [
   { title: "Companies", url: "/companies", icon: Building01Icon },
   { title: "Interviews", url: "/interviews", icon: Calendar01Icon },
   { title: "Saved Jobs", url: "/saved", icon: Bookmark01Icon },
-]
+];
 
 const navFooter = [
   { title: "Settings", url: "/settings", icon: Settings01Icon },
-]
+];
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const pathname = usePathname()
+  const pathname = usePathname();
 
   return (
     <Sidebar collapsible="icon" {...props}>
-      <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="lg" render={<Link href="/" />}>
-              <div className="flex aspect-square size-8 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground">
-                <HugeiconsIcon icon={Target01Icon} strokeWidth={2} className="size-4" />
-              </div>
-              <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">GetHired</span>
-                <span className="truncate text-xs text-sidebar-foreground/70">
-                  Job search tracker
-                </span>
-              </div>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Overview</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {navMain.map((item) => (
@@ -100,5 +83,5 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
-  )
+  );
 }
