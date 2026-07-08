@@ -9,6 +9,7 @@ import {
   Building01Icon,
   Calendar01Icon,
   DashboardSquare01Icon,
+  FileUploadIcon,
   Settings01Icon,
   Target01Icon,
 } from "@hugeicons/core-free-icons";
@@ -34,6 +35,7 @@ const navMain = [
   { title: "Companies", url: "/companies", icon: Building01Icon },
   { title: "Interviews", url: "/interviews", icon: Calendar01Icon },
   { title: "Saved Jobs", url: "/saved", icon: Bookmark01Icon },
+  { title: "Import", url: "/import", icon: FileUploadIcon },
 ];
 
 const navFooter = [

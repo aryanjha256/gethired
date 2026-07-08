@@ -26,4 +26,8 @@ we will keep a handoff at root as handoff.md (create if not one), to udpate the 
 - for table, we have table from shadcn just basic one, but we also have tanstack table installed, we need to create a data-table type of abstraction over it using tanstack table and table component from shadcn so we make it more abstracted and reusable
 - this abstraction may be needed to done for some other components like combobox or so, so that we can use it in a more declartive way
 - we also have zod and react hook form installed, can create some abstraction if needed or use it as needed.
--
+- always make sure the code is modular and future proof and scalable.
+- dont use native like date, input, checkbox, button and styling it over it, use installed shadcn components.
+- when a screenshot or reference is given. dont copy it exactly, just follow the placement of ui elements, logic or functionality type of things and implement in our own visual direction.
+- dont use native select from ui folder, use select.
+- if code or any component becomes complex and too much code in a single file, try to modularize it.
