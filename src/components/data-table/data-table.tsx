@@ -37,12 +37,14 @@ interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
   data: TData[]
   enableRowSelection?: boolean
+  onSelectedRowsChange?: (rows: TData[]) => void
 }
 
 export function DataTable<TData, TValue>({
   columns,
   data,
   enableRowSelection = false,
+  onSelectedRowsChange,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -83,6 +85,14 @@ export function DataTable<TData, TValue>({
   })
 
   const visibleColumnCount = table.getVisibleLeafColumns().length
+
+  React.useEffect(() => {
+    onSelectedRowsChange?.(table.getSelectedRowModel().rows.map((row) => row.original))
+    // Only re-run when the selection itself changes — `table` is a fresh
+    // object every render (TanStack Table isn't memoizable), so including it
+    // here would fire this on every render instead of on selection changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rowSelection])
 
   return (
     <div className="flex flex-col gap-3">

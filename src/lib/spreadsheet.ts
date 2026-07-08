@@ -2,6 +2,11 @@ import * as XLSX from "xlsx"
 
 export type SpreadsheetCell = string | number | boolean | Date | null
 
+// What a row looks like once it's crossed a Server Action boundary — Date
+// isn't a plain object, so it can't be passed from a Client Component to a
+// Server Function and must be converted first (see serializeSpreadsheetRow).
+export type SerializedSpreadsheetCell = string | number | boolean | null
+
 export type ColumnType = "string" | "number" | "date"
 
 export interface SpreadsheetColumn {
@@ -67,4 +72,15 @@ export async function parseSpreadsheetFile(
   }))
 
   return { columns, rows }
+}
+
+export function serializeSpreadsheetRow(
+  row: Record<string, SpreadsheetCell>
+): Record<string, SerializedSpreadsheetCell> {
+  return Object.fromEntries(
+    Object.entries(row).map(([key, value]) => [
+      key,
+      value instanceof Date ? value.toISOString() : value,
+    ])
+  )
 }

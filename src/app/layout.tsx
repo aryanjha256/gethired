@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/sonner";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -74,6 +75,7 @@ export default function RootLayout({
                   {children}
                 </SidebarInset>
               </SidebarProvider>
+              <Toaster />
             </TooltipProvider>
           </ThemeProvider>
         </ClerkProvider>

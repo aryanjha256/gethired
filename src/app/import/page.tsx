@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { FileUploadIcon } from "@hugeicons/core-free-icons";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -17,9 +18,12 @@ import {
 import { DataTable } from "@/components/data-table";
 import {
   parseSpreadsheetFile,
+  serializeSpreadsheetRow,
   type ParsedSpreadsheet,
   type SpreadsheetCell,
 } from "@/lib/spreadsheet";
+
+import { approveCompanies } from "./actions";
 
 function formatCell(value: SpreadsheetCell) {
   if (value instanceof Date) return value.toLocaleDateString();
@@ -32,6 +36,8 @@ export default function ImportPage() {
   const [parsed, setParsed] = useState<ParsedSpreadsheet | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isParsing, setIsParsing] = useState(false);
+  const [selectedRows, setSelectedRows] = useState<Record<string, SpreadsheetCell>[]>([]);
+  const [isApproving, startApproving] = useTransition();
 
   const columns = useMemo<ColumnDef<Record<string, SpreadsheetCell>>[]>(
     () =>
@@ -72,6 +78,28 @@ export default function ImportPage() {
     setParsed(null);
     setFileName(null);
     setError(null);
+    setSelectedRows([]);
+  }
+
+  function handleApprove() {
+    startApproving(async () => {
+      const result = await approveCompanies(
+        selectedRows.map(serializeSpreadsheetRow),
+        fileName ?? undefined,
+      );
+      if (result.inserted > 0) {
+        toast.success(
+          `Imported ${result.inserted} compan${result.inserted === 1 ? "y" : "ies"} to Companies` +
+            (result.skipped > 0
+              ? ` (${result.skipped} skipped — no name column matched)`
+              : ""),
+        );
+      } else {
+        toast.error(
+          "Nothing was imported — none of the selected rows had a recognizable name column.",
+        );
+      }
+    });
   }
 
   return (
@@ -97,11 +125,26 @@ export default function ImportPage() {
                 {parsed.columns.length === 1 ? "" : "s"}
               </p>
             </div>
-            <Button variant="outline" onClick={reset}>
-              Upload another file
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={handleApprove}
+                disabled={selectedRows.length === 0 || isApproving}
+              >
+                {isApproving
+                  ? "Importing..."
+                  : `Import to Companies${selectedRows.length ? ` (${selectedRows.length})` : ""}`}
+              </Button>
+              <Button variant="outline" onClick={reset}>
+                Upload another file
+              </Button>
+            </div>
           </div>
-          <DataTable columns={columns} data={parsed.rows} enableRowSelection />
+          <DataTable
+            columns={columns}
+            data={parsed.rows}
+            enableRowSelection
+            onSelectedRowsChange={setSelectedRows}
+          />
         </>
       ) : (
         <Empty>
