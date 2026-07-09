@@ -29,6 +29,7 @@ import { DataTableColumnHeader } from "./column-header"
 import { dataTableFilterFns, filterFnForVariant } from "./filter-fns"
 import { DataTableFilterMenu } from "./filter-menu"
 import { DataTablePagination } from "./pagination"
+import { DataTableSelectAllBanner } from "./select-all-banner"
 import { createSelectColumn } from "./select-column"
 import { DataTableSortMenu } from "./sort-menu"
 import { DataTableViewMenu } from "./view-menu"
@@ -103,6 +104,9 @@ export function DataTable<TData, TValue>({
         </div>
         <DataTableViewMenu table={table} />
       </div>
+      {enableRowSelection && (
+        <DataTableSelectAllBanner table={table} setRowSelection={setRowSelection} />
+      )}
       <div className="rounded-2xl border">
         <Table>
           <TableHeader>
