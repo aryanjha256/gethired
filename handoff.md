@@ -2,7 +2,71 @@
 
 Short log of features shipped and caveats to know about. Newest on top.
 
-## Database + Companies list (import → approve → persist)
+## 404 page
+
+- **What**: `src/app/not-found.tsx` — renders inside the existing root layout (so the sidebar/header still show), using the same `Empty` component pattern as the Import screen's pre-upload state, with a link back to the Dashboard. Standard App Router `not-found.js` convention, not the newer experimental `global-not-found.js` (that one's for apps with multiple root layouts, which this isn't).
+
+## Contacts replace Companies as the primary outreach entity
+
+- **Why**: cold outreach targets *people* (HR/recruiters), not companies — a company can have many contacts, and email is the real unique identifier, not company name. Everything that used to model "one company = one email" now models "many contacts, each optionally belonging to one company."
+- **Setup required**: this changes the schema shape (not just adds columns), so run `npm run db:push` and **choose to drop/recreate `companies`/create `contacts` when prompted** — by agreement, existing test data in these tables is not being migrated, just reset.
+- **Schema** (`src/db/schema.ts`):
+  - `companies` is now a lookup/grouping entity only — dropped `email` and `status` (a company is never emailed directly, and outreach status is a per-contact thing now, not per-company).
+  - New `contacts` table is the primary entity: `email` is `notNull().unique()` (the real identifier), plus `name`, `title`, `phone`, `companyId` (FK to `companies`, nullable), `status` (moved here from companies, default `"new"`), `notes`, `source`, `raw` JSON catch-all.
+  - `emails.companyId` → `emails.contactId`.
+- **Import** (`src/app/import/actions.ts`, now `approveContacts` instead of `approveCompanies`):
+  - Field aliases split into contact fields (name/email/title/phone/notes) and company fields (company name/website/industry/location) — previously "Name" was treated as the *company's* name; now it's the *person's* name, and a company is only recognized via an explicit "Company"/"Organization"/"Employer"-style column.
+  - Company matching is by **normalized name** (lowercased, common suffixes like "Inc."/"LLC"/"Corp" stripped, punctuation/whitespace collapsed) — curated HR lists commonly spell the same company differently across rows ("Acme" vs "Acme Inc."), so exact-string matching would silently create duplicate companies. This is best-effort, not fuzzy matching — genuinely different spellings that don't share a normalized form will still create separate companies.
+  - Contacts are deduped by email via `onConflictDoNothing` — re-importing a sheet with a contact that already exists just skips that row (existing data isn't overwritten). Company info (website/industry/location) is only set when a company is first created, not merged in from later rows that mention the same company with more detail.
+  - Returns `{ inserted, skippedNoEmail, skippedDuplicate }` instead of `{ inserted, skipped }`.
+- **Pages**: `/companies` is gone; `/contacts` replaces it (same nav slot, renamed, new icon) — lists contacts with a `companyName` column (via a join), row selection, and the same "Send Email" dialog pattern as before (`src/app/contacts/actions.ts`'s `sendContactEmails`). The dialog no longer needs to warn about "no email on file" — every contact has one, by schema.
+  - `/emails`'s recipient picker now lists contacts (label shows name, email, and company for context) instead of companies, and sends via `sendContactEmails`.
+- **Explicitly deferred** (per discussion — these are real requirements but would have made this change too large to land at once):
+  - Dynamic/merge-field email content (e.g. `{{company}}`, `{{contactName}}` in subject/body).
+  - Preventing a duplicate *initial* outreach email to the same contact (with an eventual cooldown-based override, e.g. "allow re-sending after 45 days").
+  - Threaded follow-ups (would need to capture and store each send's `Message-ID` to set `In-Reply-To`/`References` headers on the next email in the same thread).
+
+## Test Email (Settings)
+
+- **What**: `/settings` (the sidebar "Settings" link, which previously 404'd — no page existed for it yet) now has a landing page linking to `/settings/test-email`, a bare send-to-anyone form (To/Subject/Message) for verifying SMTP works, independent of Companies entirely. Not logged to the `emails` table — this is a throwaway smoke test, not outreach history.
+- **Files**:
+  - `src/app/settings/page.tsx` — minimal settings index (just one card linking to Test Email for now).
+  - `src/app/settings/test-email/page.tsx` + `test-email-form.tsx` + `actions.ts` — the form and its `sendTestEmail(to, subject, body)` Server Action, a thin wrapper directly around `sendMail()` from `src/lib/mailer.ts` (no Companies/DB involved at all).
+- **Caveats**:
+  - Uses the same single global SMTP account as everything else — there's no way to test a *different* SMTP config from here without changing `.env.local`.
+  - If email sending ever grows a second provider (e.g. Gmail API via OAuth scopes through Clerk), this page's only dependency is `sendMail()`'s signature (`{ to, subject, text }`) — swapping the implementation inside `mailer.ts` wouldn't require touching this page.
+
+## Dedicated "Send Email" page (superseded — recipients are now Contacts, see above)
+
+- **What**: new `/emails` page (own sidebar nav item, "Emails") — a full-page compose experience: search/multi-select recipients from any company that has an email on file, write a subject + message, and send. Independent of and in addition to the existing "Send Email" dialog on `/companies` (that one's still there for quickly emailing rows you've already selected in the table); this page is for composing from scratch without needing to go through Companies first.
+- **Files**:
+  - `src/app/emails/page.tsx` — Server Component, fetches `{ id, name, email }` for every company with a non-null email (`export const dynamic = "force-dynamic"`, same reasoning as `/companies`: must never serve a stale list).
+  - `src/app/emails/compose-email.tsx` — the form. Recipient picker uses the shadcn `Combobox` in `multiple` mode for search/select, but renders the selected recipients as removable `Badge`s itself rather than using `Combobox`'s chips sub-components (`ComboboxChips`/`ComboboxChip`/`ComboboxChipRemove`) — those rely on some internal index/context wiring I couldn't fully verify was correct without the ability to check base-ui's live docs, so I opted for the version I could verify is correct. Revisit if a future feature calls for chips-inside-the-input specifically. Sending reuses the existing `sendCompanyEmails` Server Action from `/companies` unchanged — no logic duplicated.
+  - `src/components/app-sidebar.tsx` — added the "Emails" nav item.
+- **Caveats**:
+  - Only companies with an email on file appear as selectable recipients (no way to email an ad-hoc address that isn't already a Company).
+  - Same plain-text-only, sequential-send, single-global-SMTP-account caveats as the section below apply here too, since both paths go through the same `sendCompanyEmails` action.
+
+## Send email to Companies (SMTP + app password) (superseded — this is now /contacts + sendContactEmails, see above)
+
+- **What**: on `/companies`, select one or more rows and click "Send Email" to open a compose dialog (subject + message body, plain text). Sends individually to each selected company's email address (not one email CC'ing everyone) via a personal SMTP account + app password — no OAuth/Clerk email scopes involved, this is the "simple approach for now." Every send attempt (success or failure) is logged to a new `emails` table.
+- **Setup required before this works**:
+  1. Add `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM_NAME` to `.env.local` (see `.env.example` — defaults are filled in for Gmail). `SMTP_PASSWORD` is a Gmail **app password** (Google Account → Security → 2-Step Verification → App passwords), not your normal login password — app passwords require 2FA to be enabled on the account.
+  2. Run `npm run db:push` again — the schema changed (new `email` column on `companies`, new `emails` table).
+- **Files**:
+  - `src/db/schema.ts` — added `email` (nullable text) to `companies`; new `emails` table logging every send attempt (`companyId`, `to`, `subject`, `body`, `status: "sent" | "failed"`, `error`, `createdAt`) — this is the data future follow-up/template features can build on.
+  - `src/lib/mailer.ts` — `sendMail({ to, subject, text })`, a lazily-created pooled `nodemailer` SMTP transporter (reused across sends in the same process instead of reconnecting per email).
+  - `src/app/companies/actions.ts` — `sendCompanyEmails(companyIds, subject, body)` Server Action. Re-fetches the companies by ID from the DB (doesn't trust client-supplied email strings), skips any with no email on file, sends **sequentially** (not `Promise.all`) to stay well under Gmail's SMTP rate limits, and logs each attempt regardless of outcome.
+  - `src/app/companies/send-email-dialog.tsx` — the compose dialog (`react-hook-form`, no `zod`/resolver — the form is just two required text fields, didn't need schema validation glue for that). Shows the resolved recipient count and warns if some selected companies have no email and will be skipped.
+  - `src/app/companies/companies-table.tsx` — turned on `enableRowSelection`, added an `email` column, and added the "Send Email" button (enabled once ≥1 row is selected) that opens the dialog.
+  - `src/app/import/actions.ts` — added `email` to `FIELD_ALIASES` so future spreadsheet imports auto-populate it (aliases: "Email", "Email Address", "Contact Email", "Mail").
+- **Caveats**:
+  - Plain text only — no HTML/rich formatting, no attachments, no templates yet (that's the next feature).
+  - Sequential sends mean a large selection will take a while (one SMTP round-trip per recipient) — fine at personal-CRM scale, would need rethinking (e.g. a background job/queue) at real bulk-email volume.
+  - Selection doesn't auto-clear after sending, same as the existing Import-screen caveat below — `DataTable` still has no reset-selection API.
+  - Single global SMTP account for the whole app (env vars, not per-user settings) — matches this being a personal tool; would need real per-user credential storage if this ever became multi-tenant.
+
+## Database + Companies list (import → approve → persist) (superseded — /companies no longer exists, replaced by /contacts, see above)
 
 - **What**: the Import screen's row selection (checkboxes) now feeds a real "Import to Companies" action. Selecting rows and clicking the button maps each row's columns onto a `companies` Postgres table (via Drizzle) and inserts them; a new `/companies` page (already in the sidebar) lists everything that's been approved so far, using the same `DataTable`.
 - **Setup required before this works**:

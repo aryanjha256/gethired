@@ -6,12 +6,13 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Bookmark01Icon,
   Briefcase01Icon,
-  Building01Icon,
   Calendar01Icon,
   DashboardSquare01Icon,
   FileUploadIcon,
+  Mail01Icon,
   Settings01Icon,
   Target01Icon,
+  UserGroupIcon,
 } from "@hugeicons/core-free-icons";
 
 import {
@@ -32,10 +33,11 @@ import Image from "next/image";
 const navMain = [
   { title: "Dashboard", url: "/", icon: DashboardSquare01Icon },
   { title: "Applications", url: "/applications", icon: Briefcase01Icon },
-  { title: "Companies", url: "/companies", icon: Building01Icon },
+  { title: "Contacts", url: "/contacts", icon: UserGroupIcon },
   { title: "Interviews", url: "/interviews", icon: Calendar01Icon },
   { title: "Saved Jobs", url: "/saved", icon: Bookmark01Icon },
   { title: "Import", url: "/import", icon: FileUploadIcon },
+  { title: "Emails", url: "/emails", icon: Mail01Icon },
 ];
 
 const navFooter = [

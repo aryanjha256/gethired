@@ -23,7 +23,7 @@ import {
   type SpreadsheetCell,
 } from "@/lib/spreadsheet";
 
-import { approveCompanies } from "./actions";
+import { approveContacts } from "./actions";
 
 function formatCell(value: SpreadsheetCell) {
   if (value instanceof Date) return value.toLocaleDateString();
@@ -83,20 +83,21 @@ export default function ImportPage() {
 
   function handleApprove() {
     startApproving(async () => {
-      const result = await approveCompanies(
+      const result = await approveContacts(
         selectedRows.map(serializeSpreadsheetRow),
         fileName ?? undefined,
       );
+      const skipped = result.skippedNoEmail + result.skippedDuplicate;
       if (result.inserted > 0) {
         toast.success(
-          `Imported ${result.inserted} compan${result.inserted === 1 ? "y" : "ies"} to Companies` +
-            (result.skipped > 0
-              ? ` (${result.skipped} skipped — no name column matched)`
-              : ""),
+          `Imported ${result.inserted} contact${result.inserted === 1 ? "" : "s"} to Contacts` +
+            (skipped > 0 ? ` (${skipped} skipped)` : ""),
         );
       } else {
         toast.error(
-          "Nothing was imported — none of the selected rows had a recognizable name column.",
+          result.skippedDuplicate > 0
+            ? "Nothing was imported — those contacts already exist (matched by email)."
+            : "Nothing was imported — none of the selected rows had a recognizable email column.",
         );
       }
     });
@@ -132,7 +133,7 @@ export default function ImportPage() {
               >
                 {isApproving
                   ? "Importing..."
-                  : `Import to Companies${selectedRows.length ? ` (${selectedRows.length})` : ""}`}
+                  : `Import to Contacts${selectedRows.length ? ` (${selectedRows.length})` : ""}`}
               </Button>
               <Button variant="outline" onClick={reset}>
                 Upload another file

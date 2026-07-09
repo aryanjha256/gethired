@@ -31,3 +31,4 @@ we will keep a handoff at root as handoff.md (create if not one), to udpate the 
 - when a screenshot or reference is given. dont copy it exactly, just follow the placement of ui elements, logic or functionality type of things and implement in our own visual direction.
 - dont use native select from ui folder, use select.
 - if code or any component becomes complex and too much code in a single file, try to modularize it.
+- dont repeat code unless much needed
