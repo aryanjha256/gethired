@@ -1,0 +1,51 @@
+"use client";
+
+import { useClerk, useUser } from "@clerk/nextjs";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Logout03Icon } from "@hugeicons/core-free-icons";
+
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+export function UserMenu() {
+  const { user } = useUser();
+  const { signOut } = useClerk();
+
+  if (!user) return null;
+
+  const email = user.primaryEmailAddress?.emailAddress ?? "";
+  const initials = (user.fullName?.trim() || email).slice(0, 2).toUpperCase();
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={<Button variant="ghost" size="icon" className="rounded-full" />}
+      >
+        <Avatar size="sm">
+          <AvatarImage src={user.imageUrl} alt={email} />
+          <AvatarFallback>{initials}</AvatarFallback>
+        </Avatar>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel className="truncate font-normal text-muted-foreground">
+          {email}
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => signOut(undefined, { redirectUrl: "/sign-in" })}
+        >
+          <HugeiconsIcon icon={Logout03Icon} strokeWidth={2} />
+          Sign out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}

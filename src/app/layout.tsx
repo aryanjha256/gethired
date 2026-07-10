@@ -4,16 +4,8 @@ import "./globals.css";
 import { cn } from "@/lib/utils";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeProvider } from "@/components/theme-provider";
-import {
-  ClerkProvider,
-  Show,
-  SignInButton,
-  SignUpButton,
-  UserButton,
-} from "@clerk/nextjs";
+import { ClerkProvider } from "@clerk/nextjs";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -60,21 +52,7 @@ export default function RootLayout({
             disableTransitionOnChange
           >
             <TooltipProvider>
-              <SidebarProvider>
-                <AppSidebar variant="floating" />
-                <SidebarInset>
-                  <header className="flex h-14 shrink-0 items-center justify-end gap-2 border-b px-4">
-                    <Show when="signed-out">
-                      <SignInButton />
-                      <SignUpButton />
-                    </Show>
-                    <Show when="signed-in">
-                      <UserButton />
-                    </Show>
-                  </header>
-                  {children}
-                </SidebarInset>
-              </SidebarProvider>
+              {children}
               <Toaster />
             </TooltipProvider>
           </ThemeProvider>

@@ -2,9 +2,98 @@
 
 Short log of features shipped and caveats to know about. Newest on top.
 
+## Email templates with per-recipient variables
+
+- **What**: reusable email templates (Settings → Templates) with `{{variable}}`
+  placeholders (`{{firstName}}`, `{{company}}`, `{{title}}`, `{{myName}}`,
+  `{{signature}}`, etc.) that get resolved **per recipient** at send time — not
+  once for the whole batch. Both existing send surfaces (the bulk "Send Email"
+  dialog on `/contacts` and the `/emails` composer) gained a "Template" picker
+  that pre-fills Subject/Body with the raw template text (still editable);
+  choosing "None" preserves the old fully-manual behavior exactly.
+- **New Settings → Sender Identity** page (`/settings/sender`): your display
+  name + a signature block, stored in a singleton `app_settings` row, used only
+  to resolve `{{myName}}`/`{{signature}}` — unrelated to `SMTP_FROM_NAME` (that's
+  still just the SMTP transport's From header).
+- **Files**:
+  - `src/db/schema.ts` — new `templates` table (name/type/subject/body; `type`
+    is free `text`, validated against `TEMPLATE_TYPES` at the app layer, same
+    convention as `contacts.status`), new singleton `app_settings` table (fixed
+    `id: "singleton"` PK — writes are always a single `insert().onConflictDoUpdate()`,
+    no fetch-then-branch), and a nullable `emails.templateId` FK
+    (`onDelete: "set null"` — deleting a template that was used to send doesn't
+    break its log entry, just nulls the reference).
+  - `src/lib/templates.ts` — the single source of truth for variables:
+    `TEMPLATE_VARIABLES` (key/label/resolve), `renderTemplate(text, ctx)`
+    (regex `{{key}}` replace, unknown keys left as-is), `TEMPLATE_TYPES`,
+    `SAMPLE_TEMPLATE_CONTEXT` (fixed sample data for the editor's live preview).
+    Plain TS, no directives — the same function resolves both the editor's
+    preview and the real per-recipient substitution at send time, so they can't
+    drift apart.
+  - `src/app/(app)/contacts/actions.ts` — `sendContactEmails` now joins
+    `companies` (for `{{company}}`, which it didn't fetch before), loads the
+    `app_settings` singleton once (not per-contact), and renders subject/body
+    per contact before sending/logging. Logs the **rendered** text per contact,
+    not the raw template — the log should show what that specific person
+    actually received. Gained an optional 4th `templateId` param, fully
+    backward compatible (existing calls with no `{{...}}` in the text are a
+    no-op through `renderTemplate`).
+  - `src/app/(app)/settings/templates/` — `page.tsx` (list, plain `Card`s not
+    `DataTable` — overkill for a short list), `template-form.tsx` (shared
+    create/edit form: RHF for name/subject/body, plain `useState` for the type
+    `Select` — this app has zero `Controller` usage anywhere, so followed the
+    existing "local state merged in at submit" convention from
+    `emails/compose-email.tsx` instead of introducing `Controller`; variable
+    buttons insert `{{key}}` at the end of whichever field was last focused —
+    no cursor/selection-range tracking, not worth it for short subject/body
+    text; side-by-side live preview, no `Tabs` since that component has zero
+    usage anywhere else yet), `new/page.tsx` + `[id]/edit/page.tsx` (this app's
+    first dynamic route segment), `delete-template-button.tsx` (wraps the
+    existing `alert-dialog.tsx`).
+  - `src/app/(app)/settings/templates/actions.ts` — `createTemplate`/`updateTemplate`
+    `redirect()` back to the list (matching this app's actual existing
+    convention: mutate-then-navigate-to-a-fresh-route); `deleteTemplate` is the
+    **only** one of the three that calls `revalidatePath` — it's triggered from
+    the list page itself with no navigation, the first use of `revalidatePath`
+    anywhere in this app.
+  - `src/components/template-picker.tsx` — the shared `Select` used by both
+    send surfaces (`"none"` sentinel value, not `""` — empty string as an item
+    value is a footgun in select-like components generally).
+  - `src/app/(app)/settings/settings-link-card.tsx` — extracted the repeated
+    link-`Card` markup from `/settings` (was about to triple it with two new
+    entries).
+- **Setup required**: `npm run db:push` already run as part of this change
+  (purely additive — two new tables, one nullable column, no data loss).
+- **Explicitly deferred**: template `type` is purely organizational (no
+  auto-selection based on `contact.status` or anything else); preview in the
+  editor is against one fixed sample contact only, not a per-recipient preview
+  list before sending; still plain text, no HTML templates; no template
+  versioning or duplicate-send/cooldown prevention (already deferred earlier
+  for a different reason, see the Contacts section below).
+
+## Single-account auth gate (Clerk + Google OAuth, custom UI)
+
+- **What**: the app is now single-tenant behind auth. Anyone can sign in via Google, but only the email in `ALLOWED_EMAIL` (`.env.local`) can actually reach the app — everyone else lands on a "not authorized" screen. No Clerk-branded UI anywhere (no `<SignIn>`/`<SignUp>`/`<UserButton>`); sign-in and the user menu are custom shadcn components driven by Clerk's headless hooks.
+- **Why this shape**: checked this Clerk instance's live config (`/v1/environment` on its Frontend API) — `email_address` identification is off and `oauth_google` is the only enabled first factor. So "sign in" and "sign up" are the same Google button; Clerk auto-creates the account on first login. Gating happens *after* auth, not by restricting who can sign up.
+- **This Next.js fork renamed `middleware.ts` to `proxy.ts`** (see `node_modules/next/dist/docs/.../proxy.md`) — that's why the gate lives in `src/proxy.ts`, not `middleware.ts`.
+- **Files**:
+  - `src/proxy.ts` — `clerkMiddleware` wrapping every route except `_next`/api/static. No session → redirect to `/sign-in`. Signed in → fetch the user via `clerkClient().users.getUser()` (this fork runs Proxy on the Node runtime, so a Backend API call here is fine) and check the email against `isAllowedEmail()`. Not allowed → redirect to `/not-authorized`. Visiting `/sign-in` while already signed in redirects to `/` or `/not-authorized` depending on the check.
+  - `src/lib/auth.ts` — `isAllowedEmail(email)`, reads `ALLOWED_EMAIL` from env (case-insensitive compare).
+  - `src/app/(auth)/sign-in/{page.tsx,sign-in-form.tsx}` — custom Card with a "Continue with Google" button. Uses `useSignIn` from **`@clerk/nextjs/legacy`** (this Clerk version, 7.x, defaults `useSignIn`/`useSignUp` to a new signals/"Future" API with a different shape — `signIn.sso()` instead of `signIn.authenticateWithRedirect()`; went with the legacy import since it's the well-documented, unambiguous classic flow).
+  - `src/app/(auth)/sign-in/sso-callback/page.tsx` — mounts Clerk's `<AuthenticateWithRedirectCallback />` to complete the OAuth redirect.
+  - `src/app/(auth)/not-authorized/{page.tsx,sign-out-button.tsx}` — same `Empty` component pattern as `not-found.tsx`, plus a sign-out button.
+  - `src/components/user-menu.tsx` — avatar + dropdown (email label, sign out) in the app header, replacing Clerk's `<UserButton>`.
+- **Route groups**: split `src/app` into `(app)` (the existing sidebar shell — Dashboard/Contacts/Emails/Import/Settings, unchanged URLs) and `(auth)` (bare centered layout, no sidebar) so the sign-in/not-authorized screens don't render inside the app chrome. Root `layout.tsx` now only holds providers (`ClerkProvider`/`ThemeProvider`/`TooltipProvider`/`Toaster`); the sidebar + header moved into `src/app/(app)/layout.tsx`. This is a pure directory move — no URLs changed — but double-check any hardcoded `@/app/...` import paths if you add more cross-page imports (one existing one, `compose-email.tsx` → `contacts/actions`, needed updating to `@/app/(app)/contacts/actions`).
+- **Caveats**:
+  - The email-allowlist check happens only in `proxy.ts`, not duplicated in Server Actions/DAL. Per Next's own auth guide, a Proxy matcher change or a Server Function moved to an unmatched route could silently lose this protection — worth adding a defense-in-depth check (e.g. a shared `requireAllowedUser()` called from actions) if this ever needs to be hardened further.
+  - No custom session-token claims configured in the Clerk Dashboard, so the email check costs one Backend API call (`users.getUser`) per request to a protected route. Fine at single-user scale; if this matters later, add an `email` claim to the session token in Clerk's dashboard (Sessions → customize) and read it from `sessionClaims` instead.
+  - `src/app/not-found.tsx` stayed at the root (outside both route groups), so it no longer renders with the sidebar/header — root `layout.tsx` lost that chrome in this change (see above). It still renders fine as a standalone centered `Empty` card, just without the app shell around it. Move it into `(app)` if the sidebar-visible 404 look matters more than a one-line handoff note.
+  - `.env.local` already had Clerk keys but no `ALLOWED_EMAIL` — added `aryan.kumar@strideone.in`. `.env.example` documents the var with a placeholder (Clerk keys still aren't in `.env.example`, matching how it already was before this change).
+
 ## 404 page
 
 - **What**: `src/app/not-found.tsx` — renders inside the existing root layout (so the sidebar/header still show), using the same `Empty` component pattern as the Import screen's pre-upload state, with a link back to the Dashboard. Standard App Router `not-found.js` convention, not the newer experimental `global-not-found.js` (that one's for apps with multiple root layouts, which this isn't).
+  - **Superseded**: since the auth gate above moved the sidebar/header out of the root layout and into `(app)/layout.tsx`, this page no longer renders with the app chrome — see the caveats above.
 
 ## Contacts replace Companies as the primary outreach entity
 

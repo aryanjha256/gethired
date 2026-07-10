@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Cancel01Icon } from "@hugeicons/core-free-icons";
 
-import { sendContactEmails } from "@/app/contacts/actions";
+import { sendContactEmails } from "@/app/(app)/contacts/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +20,7 @@ import {
 import { Field, FieldContent, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { TemplatePicker, type TemplateOption } from "@/components/template-picker";
 
 interface RecipientOption {
   value: string; // contact id
@@ -33,8 +34,10 @@ interface ComposeFormValues {
 
 export function ComposeEmail({
   recipients,
+  templates,
 }: {
   recipients: { id: string; name: string | null; email: string; companyName: string | null }[];
+  templates: TemplateOption[];
 }) {
   const options: RecipientOption[] = recipients.map((contact) => ({
     value: contact.id,
@@ -44,11 +47,13 @@ export function ComposeEmail({
   }));
 
   const [selected, setSelected] = useState<RecipientOption[]>([]);
+  const [templateId, setTemplateId] = useState("none");
 
   const {
     register,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<ComposeFormValues>();
 
@@ -66,6 +71,7 @@ export function ComposeEmail({
       selected.map((option) => option.value),
       values.subject,
       values.body,
+      templateId === "none" ? null : templateId,
     );
 
     if (result.sent > 0) {
@@ -75,6 +81,7 @@ export function ComposeEmail({
       );
       reset();
       setSelected([]);
+      setTemplateId("none");
     } else {
       toast.error("Nothing was sent — check your SMTP configuration and try again.");
     }
@@ -123,6 +130,17 @@ export function ComposeEmail({
           )}
         </FieldContent>
       </Field>
+      <TemplatePicker
+        templates={templates}
+        value={templateId}
+        onChange={(id, template) => {
+          setTemplateId(id);
+          if (template) {
+            setValue("subject", template.subject);
+            setValue("body", template.body);
+          }
+        }}
+      />
       <Field>
         <FieldContent>
           <FieldLabel htmlFor="compose-subject">Subject</FieldLabel>

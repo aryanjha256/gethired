@@ -1,7 +1,7 @@
 import { desc, eq } from "drizzle-orm";
 
 import { db } from "@/db";
-import { companies, contacts } from "@/db/schema";
+import { companies, contacts, templates } from "@/db/schema";
 
 import { ContactsTable } from "./contacts-table";
 
@@ -26,6 +26,15 @@ export default async function ContactsPage() {
     .leftJoin(companies, eq(contacts.companyId, companies.id))
     .orderBy(desc(contacts.createdAt));
 
+  const templateOptions = await db
+    .select({
+      id: templates.id,
+      name: templates.name,
+      subject: templates.subject,
+      body: templates.body,
+    })
+    .from(templates);
+
   return (
     <div className="flex flex-1 flex-col gap-4 p-6">
       <div>
@@ -34,7 +43,7 @@ export default async function ContactsPage() {
           {data.length} contact{data.length === 1 ? "" : "s"}
         </p>
       </div>
-      <ContactsTable data={data} />
+      <ContactsTable data={data} templates={templateOptions} />
     </div>
   );
 }

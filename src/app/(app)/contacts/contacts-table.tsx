@@ -6,6 +6,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table";
+import type { TemplateOption } from "@/components/template-picker";
 
 import { SendEmailDialog } from "./send-email-dialog";
 
@@ -21,7 +22,13 @@ export interface ContactRow {
   companyName: string | null;
 }
 
-export function ContactsTable({ data }: { data: ContactRow[] }) {
+export function ContactsTable({
+  data,
+  templates,
+}: {
+  data: ContactRow[];
+  templates: TemplateOption[];
+}) {
   const [selectedRows, setSelectedRows] = useState<ContactRow[]>([]);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
 
@@ -93,6 +100,7 @@ export function ContactsTable({ data }: { data: ContactRow[] }) {
         open={emailDialogOpen}
         onOpenChange={setEmailDialogOpen}
         contacts={selectedRows}
+        templates={templates}
       />
     </div>
   );

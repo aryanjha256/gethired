@@ -16,6 +16,7 @@ import {
 import { Field, FieldContent, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { TemplatePicker, type TemplateOption } from "@/components/template-picker";
 
 import type { ContactRow } from "./contacts-table";
 import { sendContactEmails } from "./actions";
@@ -23,23 +24,29 @@ import { sendContactEmails } from "./actions";
 interface SendEmailFormValues {
   subject: string;
   body: string;
+  templateId: string;
 }
 
 export function SendEmailDialog({
   open,
   onOpenChange,
   contacts,
+  templates,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   contacts: ContactRow[];
+  templates: TemplateOption[];
 }) {
   const {
     register,
     handleSubmit,
     reset,
+    setValue,
+    watch,
     formState: { errors, isSubmitting },
-  } = useForm<SendEmailFormValues>();
+  } = useForm<SendEmailFormValues>({ defaultValues: { templateId: "none" } });
+  const templateId = watch("templateId");
 
   useEffect(() => {
     if (open) reset();
@@ -50,6 +57,7 @@ export function SendEmailDialog({
       contacts.map((contact) => contact.id),
       values.subject,
       values.body,
+      values.templateId === "none" ? null : values.templateId,
     );
 
     if (result.sent > 0) {
@@ -73,6 +81,17 @@ export function SendEmailDialog({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+          <TemplatePicker
+            templates={templates}
+            value={templateId}
+            onChange={(id, template) => {
+              setValue("templateId", id);
+              if (template) {
+                setValue("subject", template.subject);
+                setValue("body", template.body);
+              }
+            }}
+          />
           <Field>
             <FieldContent>
               <FieldLabel htmlFor="send-email-subject">Subject</FieldLabel>

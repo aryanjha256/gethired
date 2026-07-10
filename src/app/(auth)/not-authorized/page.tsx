@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { FileNotFoundIcon } from "@hugeicons/core-free-icons";
+import { UserBlock02Icon } from "@hugeicons/core-free-icons";
 
 import {
   Empty,
@@ -11,24 +10,23 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 
-export default function NotFound() {
+import { SignOutButton } from "./sign-out-button";
+
+export default function NotAuthorizedPage() {
   return (
     <div className="flex flex-1 items-center justify-center p-6">
       <Empty>
         <EmptyHeader>
           <EmptyMedia variant="icon">
-            <HugeiconsIcon icon={FileNotFoundIcon} strokeWidth={2} />
+            <HugeiconsIcon icon={UserBlock02Icon} strokeWidth={2} />
           </EmptyMedia>
-          <EmptyTitle>Page not found</EmptyTitle>
+          <EmptyTitle>Access restricted</EmptyTitle>
           <EmptyDescription>
-            The page you&apos;re looking for doesn&apos;t exist or may have been
-            moved.
+            This app is limited to a single account, and yours isn&apos;t it.
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          <Link className="text-primary hover:underline" href="/">
-            Back to Dashboard
-          </Link>
+          <SignOutButton />
         </EmptyContent>
       </Empty>
     </div>
