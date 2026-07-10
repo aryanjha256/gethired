@@ -27,7 +27,9 @@ export default function NotFound() {
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          {/* <Button render={<Link href="/" />}>Back to Dashboard</Button> */}
+          <Link className="text-primary hover:underline" href="/">
+            Back to Dashboard
+          </Link>
         </EmptyContent>
       </Empty>
     </div>
