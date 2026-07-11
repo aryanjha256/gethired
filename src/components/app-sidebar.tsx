@@ -25,6 +25,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
+import { ThemeToggle } from "@/components/theme-toggle";
 import Image from "next/image";
 
 const navMain = [
@@ -84,6 +85,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu>
+          <ThemeToggle />
           {navFooter.map((item) => (
             <SidebarMenuItem key={item.title}>
               <SidebarMenuButton

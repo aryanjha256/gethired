@@ -2,6 +2,36 @@
 
 Short log of features shipped and caveats to know about. Newest on top.
 
+## Theme toggle
+
+- **What**: `src/components/theme-toggle.tsx` — a Light/Dark/System dropdown
+  in the sidebar footer, just above Settings. `ThemeProvider`/`next-themes`
+  were already wired up in the root layout (`attribute="class"`,
+  `enableSystem`) and every color token already has dark-mode values in
+  `globals.css` — this was the one missing piece (nothing to actually
+  trigger a theme change).
+- **Files**: `src/components/theme-toggle.tsx` (new) — a `DropdownMenu`
+  triggered by a `SidebarMenuButton` (so it matches every other sidebar
+  item's look/tooltip-when-collapsed behavior), three items calling
+  `setTheme()` from `next-themes`. `src/components/app-sidebar.tsx` — added
+  `<ThemeToggle />` as the first item in the footer `SidebarMenu`, before
+  the Settings entry.
+- **Caveat worth knowing**: deliberately did **not** use the common
+  "mounted-guard + `useEffect(() => setMounted(true), [])`" pattern most
+  shadcn theme-toggle examples use to avoid a hydration mismatch on the
+  icon — that's a synchronous `setState` inside an effect, a pattern this
+  repo's React Compiler lint already flags as an error elsewhere
+  (`use-mobile.ts`, `carousel.tsx`), and adding a fresh instance of it
+  seemed wrong to introduce knowingly. Instead this just reads
+  `const { theme = "light" } = useTheme()` directly, matching the existing
+  convention already in `src/components/ui/sonner.tsx`. Trade-off: on a
+  visit where the resolved theme differs from the `"light"` default (e.g.
+  system preference is dark, or the user previously chose Dark), the sidebar
+  icon may show the wrong theme's icon for one frame before Next re-renders
+  with the real value — cosmetic only, not a layout shift or hydration
+  *error*, just a fallback default label opportunity if it's ever noticeable
+  in practice.
+
 ## Templates and Test Email promoted out of Settings
 
 - **What**: `/settings` was an index page linking out to three sub-pages
