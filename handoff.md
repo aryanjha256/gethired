@@ -2,6 +2,62 @@
 
 Short log of features shipped and caveats to know about. Newest on top.
 
+## Companies page + schema audit fixes; sidebar cleanup
+
+- **What**: two things bundled from the same review pass:
+  1. Fixed a regression from the previous change: the company-wide cooldown
+     was blocking *every* send (including follow-ups to contacts already
+     mid-conversation), not just fresh outreach. Now it only blocks sending
+     to a contact who is themselves `new`/`no_opening` — a rejection from
+     one contact at a company no longer freezes an unrelated,
+     already-in-progress thread with someone else there.
+  2. Added `companies.domain` (nullable, unique) — the intended primary
+     signal for "is this the same company" (derived from `contacts.email`,
+     which is already `notNull().unique()`), to eventually replace/augment
+     the existing normalized-company-name matching at import time. This
+     round only added the column; the actual domain-based matching logic in
+     `import/actions.ts` (with a free-email-provider blocklist so
+     `gmail.com`/`yahoo.com`/etc. don't get treated as a single "company")
+     is still to be implemented.
+  3. New `/companies` page — read-only overview (name, domain, contact
+     count, an "Interviewing" or "Cooldown (Nd left)" badge). No bulk
+     actions, since companies are never emailed directly. Sidebar trimmed:
+     removed `Applications`/`Interviews`/`Saved Jobs` (dead links — no page
+     ever existed for any of them) and `Emails` (redundant with the existing
+     "Send Email" dialog on `/contacts` — same recipients-plus-template
+     flow, just a second surface for the same thing). Sidebar is now just
+     Dashboard, Contacts, Companies, Import, Settings.
+- **Files**:
+  - `src/app/(app)/contacts/actions.ts` — cooldown check now gated on
+    `INITIAL_ELIGIBLE_STATUSES.includes(contact.status)` before checking
+    `cooldownActive`, instead of applying unconditionally to every contact.
+  - `src/db/schema.ts` — `companies.domain`.
+  - `src/app/(app)/companies/{page,companies-table}.tsx` — new. Contact
+    count and interviewing count come from one grouped query
+    (`leftJoin(contacts)` + `count(*) filter (where status = 'interviewing')`);
+    cooldown days-left is computed server-side in `page.tsx` via the new
+    `computeCooldownDaysLeft()` in `src/lib/contacts.ts` and passed down as a
+    plain number — deliberately not computed inside the client table's
+    render, since calling `Date.now()` directly in a component body trips
+    this project's React Compiler purity lint.
+  - `src/components/app-sidebar.tsx` — trimmed `navMain` to
+    Dashboard/Contacts/Companies/Import; also dropped several
+    already-unused imports (`SidebarGroupLabel`, `SidebarHeader`, `Image`)
+    that predated this change.
+  - `src/app/(app)/emails/` — deleted entirely (page + compose form). No
+    other file imported from it except the now-removed sidebar entry.
+- **Setup required**: `npm run db:push` already run (adds `companies.domain`
+  as nullable+unique — existing 10 companies rows are untouched, still
+  `NULL`, since nothing backfills it yet).
+- **Explicitly deferred**: the domain-based company-matching logic itself
+  (blocklist of free email providers, lookup-by-domain-first at import time,
+  falling back to name-matching for free-domain contacts) — schema is ready
+  for it but `import/actions.ts` hasn't been touched yet. Also deferred:
+  clicking a company row doesn't jump to a filtered `/contacts` view yet (no
+  initial-filter prop exists on the shared `DataTable` today) — you'd need
+  to type the company name into the existing text filter on `/contacts`
+  manually for now.
+
 ## Closed the resend/spam gap in the send queue
 
 - **What**: fixed a real correctness bug in the queue design shipped just
