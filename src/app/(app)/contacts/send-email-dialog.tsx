@@ -13,10 +13,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Field, FieldContent, FieldError, FieldLabel } from "@/components/ui/field";
+import {
+  Field,
+  FieldContent,
+  FieldError,
+  FieldLabel,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { TemplatePicker, type TemplateOption } from "@/components/template-picker";
+import {
+  TemplatePicker,
+  type TemplateOption,
+} from "@/components/template-picker";
 import { describeEnqueueResult } from "@/lib/contacts";
 
 import type { ContactRow } from "./contacts-table";
@@ -74,7 +82,7 @@ export function SendEmailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="min-w-[60vw]">
         <DialogHeader>
           <DialogTitle>Send email</DialogTitle>
           <DialogDescription>
@@ -104,7 +112,7 @@ export function SendEmailDialog({
             </FieldContent>
           </Field>
           <Field>
-            <FieldContent>
+            <FieldContent className="max-h-[60vh] no-scrollbar">
               <FieldLabel htmlFor="send-email-body">Message</FieldLabel>
               <Textarea
                 id="send-email-body"
@@ -115,7 +123,10 @@ export function SendEmailDialog({
             </FieldContent>
           </Field>
           <DialogFooter>
-            <Button type="submit" disabled={isSubmitting || contacts.length === 0}>
+            <Button
+              type="submit"
+              disabled={isSubmitting || contacts.length === 0}
+            >
               {isSubmitting
                 ? "Sending..."
                 : `Send${contacts.length ? ` (${contacts.length})` : ""}`}

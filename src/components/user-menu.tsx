@@ -4,7 +4,6 @@ import { useClerk, useUser } from "@clerk/nextjs";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Logout03Icon } from "@hugeicons/core-free-icons";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -23,19 +22,13 @@ export function UserMenu() {
   if (!user) return null;
 
   const email = user.primaryEmailAddress?.emailAddress ?? "";
-  const initials = (user.fullName?.trim() || email).slice(0, 2).toUpperCase();
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={<Button variant="ghost" size="icon" className="rounded-full" />}
-      >
-        <Avatar size="sm">
-          <AvatarImage src={user.imageUrl} alt={email} />
-          <AvatarFallback>{initials}</AvatarFallback>
-        </Avatar>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+        render={<Button variant="outline">{user.fullName}</Button>}
+      />
+      <DropdownMenuContent align="end" className="min-w-64">
         <DropdownMenuGroup>
           <DropdownMenuLabel className="truncate font-normal text-muted-foreground">
             {email}
