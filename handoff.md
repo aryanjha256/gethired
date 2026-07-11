@@ -2,6 +2,135 @@
 
 Short log of features shipped and caveats to know about. Newest on top.
 
+## Closed the resend/spam gap in the send queue
+
+- **What**: fixed a real correctness bug in the queue design shipped just
+  before this: because sending had become async (enqueue instantly, actual
+  send happens later during drain), `contacts.status` didn't advance until
+  the drain completed. Re-selecting the same contacts and hitting "Send"
+  again a few seconds later — before that first batch had drained — would
+  still see the old status and happily queue a duplicate "initial" email.
+  Also, choosing "None"/a `thank_you`/`custom` template bypassed every
+  sequencing rule entirely, so repeatedly sending that way was never
+  checked or blocked at all.
+- **Fixes** (`src/app/(app)/contacts/actions.ts`, `src/lib/email-queue.ts`,
+  `src/db/schema.ts`, `src/lib/contacts.ts`):
+  - `enqueueContactEmails` now advances `contacts.status` **synchronously**,
+    per contact, the instant it decides to queue that contact's email — not
+    later when the drain actually sends it. A second enqueue call, even 1ms
+    later, already sees the updated status and skips. The update is guarded
+    by the same eligible-statuses `WHERE` check (e.g. `status IN ('new',
+    'no_opening')`) so a concurrent manual status change is never
+    clobbered. If the send later fails during drain, status is **not**
+    rolled back — an attempt was still made, which is what matters for not
+    re-spamming; retrying is a deliberate manual status reset.
+  - `email-queue.ts`'s `drainEmailQueue` no longer touches `contacts` at all
+    (the `advanceContactStatus` helper was removed) — it's now purely "send
+    what's queued," since status changes happen entirely at enqueue time.
+  - The cooldown check and a new `ALWAYS_BLOCKED_STATUSES` check
+    (`closed`, `bounced`) now apply to **every** send, including
+    `thank_you`/`custom`/no-template ones — the sequencing rules can no
+    longer be routed around by just not picking a template. Deliberately did
+    **not** add `replied`/`interviewing` to that blocked list — those are
+    live conversations where you'd still want to send a scheduling note or
+    similar through this tool, so only `closed`/`bounced` (truly "don't
+    contact again") block everything.
+  - Added `"bounced"` as a `contacts.status` enum value (schema + it's now
+    manually settable via the same inline status `Select` used for every
+    other status — no bounce/inbox-reading was built, since this app has no
+    IMAP/webhook access to the mailbox; a bounce is something you notice in
+    your own inbox and reflect here manually). Unlike `no_opening`, marking
+    `bounced` does **not** touch `companies.noOpeningAt` — a bounced address
+    is a dead-contact problem, not a company-level "no opening" signal.
+- **Setup required**: `npm run db:push` already run (adds the `bounced`
+  enum value via `ALTER TYPE ... ADD VALUE`, no data loss).
+- **Still not addressed**: `emails.status: "sent"` still only means "SMTP
+  accepted it," not "delivered" — there's no automatic bounce detection
+  (would require reading the sending mailbox via IMAP or a provider
+  webhook, a materially bigger feature than this app's SMTP+app-password
+  setup supports today). Marking a contact `bounced` is still a fully
+  manual action you take after noticing the bounce yourself.
+
+## Status enums, real send queue, and company-level cooldown/interview tracking
+
+- **What**: `contacts.status`, `templates.type`, and `emails.status` are now
+  real Postgres enums instead of unvalidated `text`. Bulk sending is no
+  longer a blocking sequential loop — it's a DB-backed queue: "Send Email"
+  now enqueues (fast, one bulk insert) and a separate drain step actually
+  sends, so closing the tab mid-batch is safe and a second concurrent drain
+  can never double-send the same email. Contact status also now models the
+  full outreach lifecycle (`new → contacted → followed_up → replied →
+  interviewing | no_opening | closed`), is manually editable inline in the
+  contacts table, and drives two new business rules: (1) sending an
+  `initial` template to an already-contacted person, or a `follow_up` to
+  someone never contacted, is silently skipped; (2) marking a contact
+  `no_opening` puts that contact's **whole company** on a cooldown (default
+  45 days, configurable) during which no fresh `initial` goes to *any*
+  contact there — the idea being not to hit the same company again so soon
+  through a different person. A contact reaching `interviewing` shows a
+  small badge next to that company's other rows in `/contacts` (informational
+  only, nothing is auto-blocked by it).
+- **Files**:
+  - `src/db/schema.ts` — `contactStatusEnum`, `templateTypeEnum`,
+    `emailStatusEnum` (`pgEnum`, replacing the old free-`text` columns);
+    `companies.noOpeningAt` (nullable timestamp, set/reset whenever any
+    contact there is marked `no_opening`); `appSettings.retryCooldownDays`
+    (`integer default 45`); `emails.status` gained `"queued"`/`"sending"`
+    states (default now `"queued"` instead of no default).
+  - `src/lib/email-queue.ts` — the queue core. `claimQueuedEmails` atomically
+    claims a batch via `UPDATE ... WHERE id IN (SELECT ... FOR UPDATE SKIP
+    LOCKED)` (raw SQL through `db.execute`, since Drizzle has no query
+    builder API for `SKIP LOCKED`) so two drains racing never claim the same
+    row. `drainEmailQueue` sends each claimed row through the existing
+    `sendMail` (unchanged, still one pooled nodemailer transporter — no new
+    concurrency/rate-limit work needed there), and on success calls
+    `advanceContactStatus` (`initial` → `contacted`, `follow_up` →
+    `followed_up`, guarded by a `WHERE status IN (...)` so a status changed
+    manually in the meantime is never clobbered).
+  - `src/app/api/emails/drain/route.ts` — the app's first Route Handler.
+    `POST` runs one `drainEmailQueue` batch (limit 5) and returns
+    `{ processed, remainingQueued }`. This is what the client polls.
+  - `src/app/(app)/contacts/actions.ts` — `sendContactEmails` renamed to
+    `enqueueContactEmails` (both call sites updated): resolves targets,
+    applies the initial/follow_up eligibility + cooldown rules, renders
+    per-contact subject/body up front same as before, bulk-inserts
+    `status: "queued"` rows, then fires `after(() => drainEmailQueue(...))`
+    (this Next.js fork's `next/server` `after()`) as a best-effort immediate
+    head start — not depended on for correctness, since the client poll is
+    the durable path. Returns `{ queued, skippedNoMatch,
+    skippedSequenceMismatch, skippedCompanyCooldown }` instead of the old
+    `{ sent, failed, skipped }`, since sending is no longer synchronous with
+    the request. Also added `updateContactStatus`, which sets
+    `companies.noOpeningAt` when the new status is `no_opening`.
+  - `src/hooks/use-drain-email-queue.ts` — shared client hook, `POST`s the
+    drain endpoint every ~1.5s until `remainingQueued` hits 0. Used by both
+    `ContactsTable` (owns it at that level, not inside the dialog, so polling
+    survives the dialog closing) and `ComposeEmail` on `/emails`.
+  - `src/lib/contacts.ts` — `CONTACT_STATUSES`/`contactStatusLabel` (mirrors
+    the existing `TEMPLATE_TYPES` pattern in `templates.ts`) plus
+    `describeEnqueueResult`, the shared toast-copy helper for both send
+    surfaces.
+  - `src/app/(app)/contacts/contacts-table.tsx` — status cell is now a
+    `Select` (was a read-only `Badge`) wired to `updateContactStatus` +
+    `router.refresh()`; company cell shows an "Interviewing" badge when that
+    row's `companyId` is in the interviewing set computed on the page.
+  - `src/app/(app)/contacts/page.tsx` — added the `companyId` select field
+    and a `select distinct companyId from contacts where status =
+    'interviewing'` query feeding the badge above.
+  - `src/app/(app)/settings/sender/*` — the existing singleton settings page
+    gained a third field, "Retry cooldown (days)", rather than a new page.
+- **Setup required**: `npm run db:push` already run (confirmed the three
+  `text→enum` column conversions applied cleanly against existing data —
+  every existing value was already a valid enum member, so no data loss).
+- **Explicitly deferred**: no retry/backoff for `failed` rows (still exactly
+  one attempt); no message threading; no `"select"` filter variant for the
+  Status column (still a plain text filter); polling reports an aggregate
+  `remainingQueued` across the whole table, not scoped to the batch just
+  submitted (fine at single-user scale); no auto-blocking of sends to a
+  company's other contacts once one is `interviewing` (badge only); no
+  dedicated `/companies` page — the interviewing flag and cooldown both live
+  entirely inside the existing `/contacts` view.
+
 ## Email templates with per-recipient variables
 
 - **What**: reusable email templates (Settings → Templates) with `{{variable}}`

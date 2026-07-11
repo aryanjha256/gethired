@@ -20,11 +20,22 @@ export default async function ContactsPage() {
       status: contacts.status,
       notes: contacts.notes,
       createdAt: contacts.createdAt,
+      companyId: contacts.companyId,
       companyName: companies.name,
     })
     .from(contacts)
     .leftJoin(companies, eq(contacts.companyId, companies.id))
     .orderBy(desc(contacts.createdAt));
+
+  const interviewing = await db
+    .selectDistinct({ companyId: contacts.companyId })
+    .from(contacts)
+    .where(eq(contacts.status, "interviewing"));
+  const companiesInterviewing = new Set(
+    interviewing
+      .map((row) => row.companyId)
+      .filter((id): id is string => id !== null),
+  );
 
   const templateOptions = await db
     .select({
@@ -43,7 +54,11 @@ export default async function ContactsPage() {
           {data.length} contact{data.length === 1 ? "" : "s"}
         </p>
       </div>
-      <ContactsTable data={data} templates={templateOptions} />
+      <ContactsTable
+        data={data}
+        templates={templateOptions}
+        companiesInterviewing={companiesInterviewing}
+      />
     </div>
   );
 }

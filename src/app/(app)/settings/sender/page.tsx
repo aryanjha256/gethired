@@ -24,6 +24,7 @@ export default async function SenderIdentityPage() {
         defaultValues={{
           senderName: settings?.senderName ?? "",
           signature: settings?.signature ?? "",
+          retryCooldownDays: settings?.retryCooldownDays ?? 45,
         }}
       />
     </div>

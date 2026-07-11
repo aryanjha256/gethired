@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Cancel01Icon } from "@hugeicons/core-free-icons";
 
-import { sendContactEmails } from "@/app/(app)/contacts/actions";
+import { enqueueContactEmails } from "@/app/(app)/contacts/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +21,8 @@ import { Field, FieldContent, FieldError, FieldLabel } from "@/components/ui/fie
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { TemplatePicker, type TemplateOption } from "@/components/template-picker";
+import { describeEnqueueResult } from "@/lib/contacts";
+import { useDrainEmailQueue } from "@/hooks/use-drain-email-queue";
 
 interface RecipientOption {
   value: string; // contact id
@@ -48,6 +50,7 @@ export function ComposeEmail({
 
   const [selected, setSelected] = useState<RecipientOption[]>([]);
   const [templateId, setTemplateId] = useState("none");
+  const { startDraining } = useDrainEmailQueue();
 
   const {
     register,
@@ -67,23 +70,21 @@ export function ComposeEmail({
       return;
     }
 
-    const result = await sendContactEmails(
+    const result = await enqueueContactEmails(
       selected.map((option) => option.value),
       values.subject,
       values.body,
       templateId === "none" ? null : templateId,
     );
 
-    if (result.sent > 0) {
-      toast.success(
-        `Sent to ${result.sent} contact${result.sent === 1 ? "" : "s"}` +
-          (result.failed > 0 ? `, ${result.failed} failed` : ""),
-      );
+    if (result.queued > 0) {
+      toast.success(describeEnqueueResult(result));
+      startDraining();
       reset();
       setSelected([]);
       setTemplateId("none");
     } else {
-      toast.error("Nothing was sent — check your SMTP configuration and try again.");
+      toast.error(describeEnqueueResult(result));
     }
   }
 

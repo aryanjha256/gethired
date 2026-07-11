@@ -17,9 +17,10 @@ import { Field, FieldContent, FieldError, FieldLabel } from "@/components/ui/fie
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { TemplatePicker, type TemplateOption } from "@/components/template-picker";
+import { describeEnqueueResult } from "@/lib/contacts";
 
 import type { ContactRow } from "./contacts-table";
-import { sendContactEmails } from "./actions";
+import { enqueueContactEmails } from "./actions";
 
 interface SendEmailFormValues {
   subject: string;
@@ -32,11 +33,13 @@ export function SendEmailDialog({
   onOpenChange,
   contacts,
   templates,
+  onQueued,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   contacts: ContactRow[];
   templates: TemplateOption[];
+  onQueued: () => void;
 }) {
   const {
     register,
@@ -53,21 +56,19 @@ export function SendEmailDialog({
   }, [open, reset]);
 
   async function onSubmit(values: SendEmailFormValues) {
-    const result = await sendContactEmails(
+    const result = await enqueueContactEmails(
       contacts.map((contact) => contact.id),
       values.subject,
       values.body,
       values.templateId === "none" ? null : values.templateId,
     );
 
-    if (result.sent > 0) {
-      toast.success(
-        `Sent to ${result.sent} contact${result.sent === 1 ? "" : "s"}` +
-          (result.failed > 0 ? `, ${result.failed} failed` : ""),
-      );
+    if (result.queued > 0) {
+      toast.success(describeEnqueueResult(result));
+      onQueued();
       onOpenChange(false);
     } else {
-      toast.error("Nothing was sent — check your SMTP configuration and try again.");
+      toast.error(describeEnqueueResult(result));
     }
   }
 
