@@ -34,6 +34,10 @@ export function TemplatePicker({
               templates.find((template) => template.id === next),
             );
           }}
+          items={[
+            { value: "none", label: "None" },
+            ...templates.map((template) => ({ value: template.id, label: template.name })),
+          ]}
         >
           <SelectTrigger className="w-full">
             <SelectValue />

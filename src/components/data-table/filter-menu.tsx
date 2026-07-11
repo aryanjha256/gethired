@@ -107,6 +107,10 @@ export function DataTableFilterMenu<TData>({
                 <Select
                   value={filter.id}
                   onValueChange={(value) => value && changeFilterColumn(index, value)}
+                  items={filterableColumns.map((c) => ({
+                    value: c.id,
+                    label: getColumnLabel(c),
+                  }))}
                 >
                   <SelectTrigger size="sm" className="w-32">
                     <SelectValue />
@@ -179,6 +183,12 @@ function DataTableFilterValueEditor<TData, TValue>({
         <Select
           value={filterValue.operator}
           onValueChange={(operator) => operator && onChange({ ...filterValue, operator })}
+          items={[
+            { value: "eq", label: "=" },
+            { value: "gt", label: ">" },
+            { value: "lt", label: "<" },
+            { value: "between", label: "Between" },
+          ]}
         >
           <SelectTrigger size="sm" className="w-24">
             <SelectValue />
@@ -225,6 +235,12 @@ function DataTableFilterValueEditor<TData, TValue>({
         <Select
           value={filterValue.operator}
           onValueChange={(operator) => operator && onChange({ ...filterValue, operator })}
+          items={[
+            { value: "is", label: "Is" },
+            { value: "before", label: "Before" },
+            { value: "after", label: "After" },
+            { value: "between", label: "Between" },
+          ]}
         >
           <SelectTrigger size="sm" className="w-24">
             <SelectValue />

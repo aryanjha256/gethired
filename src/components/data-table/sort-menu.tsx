@@ -65,6 +65,10 @@ export function DataTableSortMenu<TData>({
               <Select
                 value={sort.id}
                 onValueChange={(value) => value && updateSort(index, { id: value })}
+                items={sortableColumns.map((column) => ({
+                  value: column.id,
+                  label: getColumnLabel(column),
+                }))}
               >
                 <SelectTrigger size="sm" className="flex-1">
                   <SelectValue />
@@ -86,6 +90,10 @@ export function DataTableSortMenu<TData>({
               <Select
                 value={sort.desc ? "desc" : "asc"}
                 onValueChange={(value) => updateSort(index, { desc: value === "desc" })}
+                items={[
+                  { value: "asc", label: "Asc" },
+                  { value: "desc", label: "Desc" },
+                ]}
               >
                 <SelectTrigger size="sm" className="w-20">
                   <SelectValue />

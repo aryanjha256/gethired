@@ -113,6 +113,7 @@ export function ContactsTable({
             onValueChange={(value) =>
               value && handleStatusChange(row.original.id, value as Contact["status"])
             }
+            items={CONTACT_STATUSES}
           >
             <SelectTrigger size="sm" className="w-36">
               <SelectValue />

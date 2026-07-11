@@ -95,7 +95,11 @@ export function TemplateForm({
         <Field>
           <FieldContent>
             <FieldLabel htmlFor="template-type">Type</FieldLabel>
-            <Select value={type} onValueChange={(value) => value && setType(value)}>
+            <Select
+              value={type}
+              onValueChange={(value) => value && setType(value)}
+              items={TEMPLATE_TYPES}
+            >
               <SelectTrigger id="template-type">
                 <SelectValue />
               </SelectTrigger>
