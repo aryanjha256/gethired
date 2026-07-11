@@ -15,5 +15,5 @@ export async function updateSenderSettings(values: {
     .values({ id: "singleton", ...values })
     .onConflictDoUpdate({ target: appSettings.id, set: values });
 
-  revalidatePath("/settings/sender");
+  revalidatePath("/settings");
 }

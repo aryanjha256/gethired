@@ -1,30 +1,31 @@
-import { Mail01Icon, MessageMultiple01Icon, UserIcon } from "@hugeicons/core-free-icons";
+import { eq } from "drizzle-orm";
 
-import { SettingsLinkCard } from "./settings-link-card";
+import { db } from "@/db";
+import { appSettings } from "@/db/schema";
 
-export default function SettingsPage() {
+import { SenderIdentityForm } from "./sender-identity-form";
+
+export default async function SettingsPage() {
+  const [settings] = await db
+    .select()
+    .from(appSettings)
+    .where(eq(appSettings.id, "singleton"));
+
   return (
     <div className="flex flex-1 flex-col gap-4 p-6">
       <div>
         <h1 className="font-heading text-lg font-medium tracking-tight">Settings</h1>
+        <p className="text-sm text-muted-foreground">
+          Your name and signature, used to fill in template variables like{" "}
+          {"{{myName}}"} and {"{{signature}}"}, plus the outreach cooldown length.
+        </p>
       </div>
-      <SettingsLinkCard
-        href="/settings/templates"
-        icon={MessageMultiple01Icon}
-        title="Templates"
-        description="Reusable email templates with variables like {{firstName}}."
-      />
-      <SettingsLinkCard
-        href="/settings/sender"
-        icon={UserIcon}
-        title="Sender Identity"
-        description="Your name and signature, used by template variables."
-      />
-      <SettingsLinkCard
-        href="/settings/test-email"
-        icon={Mail01Icon}
-        title="Test Email"
-        description="Send a one-off email to any address to verify SMTP is configured correctly."
+      <SenderIdentityForm
+        defaultValues={{
+          senderName: settings?.senderName ?? "",
+          signature: settings?.signature ?? "",
+          retryCooldownDays: settings?.retryCooldownDays ?? 45,
+        }}
       />
     </div>
   );

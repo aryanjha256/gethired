@@ -34,7 +34,7 @@ export default async function TemplatesPage() {
             get filled in per recipient when you send.
           </p>
         </div>
-        <Button render={<Link href="/settings/templates/new" />}>
+        <Button nativeButton={false} render={<Link href="/templates/new" />}>
           <HugeiconsIcon icon={Add01Icon} strokeWidth={2} />
           New Template
         </Button>
@@ -50,7 +50,7 @@ export default async function TemplatesPage() {
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
-            <Button render={<Link href="/settings/templates/new" />}>
+            <Button nativeButton={false} render={<Link href="/templates/new" />}>
               New Template
             </Button>
           </EmptyContent>
@@ -73,7 +73,8 @@ export default async function TemplatesPage() {
                   <Button
                     variant="ghost"
                     size="icon-sm"
-                    render={<Link href={`/settings/templates/${template.id}/edit`} />}
+                    nativeButton={false}
+                    render={<Link href={`/templates/${template.id}/edit`} />}
                   >
                     <HugeiconsIcon icon={PencilEdit01Icon} strokeWidth={2} />
                   </Button>

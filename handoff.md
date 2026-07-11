@@ -2,6 +2,104 @@
 
 Short log of features shipped and caveats to know about. Newest on top.
 
+## Templates and Test Email promoted out of Settings
+
+- **What**: `/settings` was an index page linking out to three sub-pages
+  (Sender Identity, Templates, Test Email) — that index-of-links pattern is
+  gone. Templates and Test Email are now first-class sidebar items with
+  their own top-level routes; `/settings` itself directly shows what used
+  to live at `/settings/sender` (name/signature/cooldown), no more
+  click-through needed.
+- **Route changes**: `/settings/templates` → `/templates` (and its
+  `/new`, `/[id]/edit` children moved with it), `/settings/test-email` →
+  `/test-email`, `/settings/sender` folded into `/settings` directly (its
+  `page.tsx`/`actions.ts`/`sender-identity-form.tsx` moved up one level,
+  `settings-link-card.tsx` deleted — nothing links to it anymore since the
+  index page it existed for is gone).
+- **Files**: pure moves, only the path strings inside them changed
+  (`redirect`/`revalidatePath` calls in `templates/actions.ts` and the
+  `Link href`s in `templates/page.tsx` updated from `/settings/templates/...`
+  to `/templates/...`; `settings/actions.ts`'s `revalidatePath` updated from
+  `/settings/sender` to `/settings`). No relative imports needed touching —
+  every moved page already imported its siblings with relative paths
+  (`./template-form`, `../template-form`, etc.) at the same relative depth.
+  `src/components/app-sidebar.tsx` gained "Templates" (`NoteEditIcon`) and
+  "Test Email" (`MailSend01Icon`) entries in `navMain`.
+- **Setup required**: none — no schema/data changes, just moved files and
+  updated hardcoded path strings.
+
+## Dashboard charts
+
+- **What**: replaced the plain "Contacts by status" count list with a
+  horizontal bar chart, and added a new "Emails sent (last 14 days)" trend
+  chart above it. Two different chart stacks, deliberately: the status
+  breakdown is a single-series magnitude comparison across 8 categories
+  (textbook bar chart), so it uses the plain `components/ui/chart.tsx` +
+  recharts `BarChart` directly — no new component needed, and it keeps that
+  section visually restrained rather than reaching for evilcharts' more
+  elaborate look everywhere. The trend chart is genuinely a time-series, so
+  it reuses `EvilAreaChart` (already fully built in
+  `src/components/evilcharts/charts/area-chart.tsx` from an earlier
+  install) — first real usage of it anywhere in the app.
+- **Files**:
+  - `src/lib/dashboard.ts` — `buildStatusChartData` (maps grouped status
+    counts onto every `CONTACT_STATUSES` entry, defaulting missing ones to
+    0) and `buildDailySendCounts` (buckets a list of send timestamps into
+    one row per day over a fixed window, zero-filling days with no sends).
+    Both are plain camelCase functions, not components — `buildDailySendCounts`
+    calls `new Date()` internally, and doing that inline in `page.tsx`'s
+    `DashboardPage` function body directly would trip this project's React
+    Compiler purity lint (it flags `Date.now()`/`new Date()` in anything
+    shaped like a component, same issue hit and fixed the same way on the
+    Companies page's cooldown math).
+  - `src/app/(app)/status-bar-chart.tsx` — client component, `layout="vertical"`
+    (horizontal bars) so the longer status labels like "Followed Up" don't
+    need to rotate. Single flat color (`var(--chart-1)`, one of this app's
+    existing chart CSS variables) rather than one hue per bar — it's one
+    series (count), so per this app's dataviz convention color shouldn't
+    imply identity that isn't there; bar length + labels already carry the
+    comparison.
+  - `src/app/(app)/emails-trend-chart.tsx` — client component wrapping
+    `EvilAreaChart` with a single `sent` series, same `var(--chart-1)` color
+    for both light/dark (that CSS variable already has identical light/dark
+    values in `globals.css`).
+  - `src/app/(app)/page.tsx` — added the 14-day window query (`emails`
+    filtered to `status = 'sent'` and `created_at >= now() - interval '1
+    day' * 14`, filter computed entirely in SQL so no JS `Date` math needed
+    in the query itself), run alongside the existing stat queries via the
+    same `Promise.all`.
+- **Setup required**: none — `recharts` and `motion` were already
+  dependencies (the evilcharts area chart pulled them in previously), and
+  the chart color CSS variables (`--chart-1`..`--chart-5`) already existed
+  in `globals.css`. No new packages.
+- **Explicitly deferred**: no date-range picker (14 days is a fixed
+  constant, `TREND_DAYS` in `page.tsx`) — matches the dashboard's existing
+  "no filtering yet" caveat. Only one evilcharts chart type is vendored
+  (area); no bar/pie/radar evilcharts variant was added, since the plain
+  shadcn bar chart was the better fit for the one categorical use case that
+  came up.
+
+## Companies page + schema audit fixes; sidebar cleanup
+
+- **What**: `/` (previously a `<div>HomePage</div>` stub) is now a real
+  overview: 4 stat tiles (Contacts, Companies, Interviewing, Failed sends),
+  a "Contacts by status" breakdown using the existing `CONTACT_STATUSES`
+  order/labels from `src/lib/contacts.ts` (so it can't drift out of sync
+  with the enum), and a "Recent activity" list of the last 8 `emails` rows
+  (recipient, subject, company, status badge). Plain stat cards, no charts —
+  matches this app's existing minimal/Linear-ish visual direction, nothing
+  new to justify a charting library.
+- **Files**: `src/app/(app)/page.tsx` only — one query per stat, all run via
+  `Promise.all` (independent aggregates, no reason to serialize them), plus
+  one join for recent activity. Small local `StatCard` presentational
+  component defined in the same file (only used here, didn't warrant its
+  own file).
+- **Explicitly deferred**: no date-range filtering (e.g. "this week" vs
+  all-time) on any of the stats — everything shown is an all-time total or
+  current snapshot. No links from the stat tiles/status rows to a
+  pre-filtered `/contacts` view yet (same gap noted on the Companies page —
+  `DataTable` has no initial-filter prop today).
+
 ## Companies page + schema audit fixes; sidebar cleanup
 
 - **What**: two things bundled from the same review pass:

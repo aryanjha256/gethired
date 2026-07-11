@@ -7,6 +7,8 @@ import {
   Building02Icon,
   DashboardSquare01Icon,
   FileUploadIcon,
+  MailSend01Icon,
+  NoteEditIcon,
   Settings01Icon,
   UserGroupIcon,
 } from "@hugeicons/core-free-icons";
@@ -29,7 +31,9 @@ const navMain = [
   { title: "Dashboard", url: "/", icon: DashboardSquare01Icon },
   { title: "Contacts", url: "/contacts", icon: UserGroupIcon },
   { title: "Companies", url: "/companies", icon: Building02Icon },
+  { title: "Templates", url: "/templates", icon: NoteEditIcon },
   { title: "Import", url: "/import", icon: FileUploadIcon },
+  { title: "Test Email", url: "/test-email", icon: MailSend01Icon },
 ];
 
 const navFooter = [
