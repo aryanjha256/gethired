@@ -17,11 +17,13 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
+import Image from "next/image";
 
 const navMain = [
   { title: "Dashboard", url: "/", icon: DashboardSquare01Icon },
@@ -39,6 +41,23 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   return (
     <Sidebar collapsible="icon" {...props}>
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuButton
+            className="pl-2 mt-2 mb-4"
+            render={<Link href="/" />}
+          >
+            <Image
+              src="/favicon.svg"
+              alt="GetHired Logo"
+              width={24}
+              height={24}
+            />
+            <span>GetHired</span>
+          </SidebarMenuButton>
+        </SidebarMenu>
+      </SidebarHeader>
+
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupContent>
