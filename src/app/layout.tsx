@@ -22,7 +22,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "GetHired",
   description:
-    "A platform that i am creating to help just myself and get hired, but if you want to use it, feel free to do so.",
+    "I originally built this platform to help myself get hired, but if it helps you too, feel free to use it.",
 };
 
 export default function RootLayout({
