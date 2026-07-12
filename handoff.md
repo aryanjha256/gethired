@@ -9,11 +9,17 @@ Short log of features shipped and caveats to know about. Newest on top.
   head-start in `enqueueContactEmails` — meaning a batch could get stuck
   `queued` forever if the browser tab closed mid-drain and nothing else
   ever triggered a new send. `vercel.json` now schedules a cron hit against
-  the same drain logic every 5 minutes (`*/5 * * * *`), independent of
-  whether any tab is open. This doesn't change how the queue is stored
-  (still the `emails` table) or how work gets claimed (still Postgres
-  `FOR UPDATE SKIP LOCKED` in `claimQueuedEmails`) — it's just a third,
-  durable way to trigger the same executor that already existed.
+  the same drain logic once a day (`0 3 * * *`, 3am UTC — Vercel's Hobby
+  plan caps cron jobs at once per day, so an every-few-minutes schedule
+  isn't available on this plan), independent of whether any tab is open.
+  This doesn't change how the queue is stored (still the `emails` table)
+  or how work gets claimed (still Postgres `FOR UPDATE SKIP LOCKED` in
+  `claimQueuedEmails`) — it's just a third, durable way to trigger the
+  same executor that already existed. Worth being clear-eyed about what
+  once-daily actually buys: it's not a tight-loop backstop, it's a "nothing
+  stays stuck for more than ~24h" guarantee — a big improvement over no
+  backstop at all, but the realistic day-to-day draining still happens via
+  the client polling loop while a tab is open.
 - **Security note surfaced along the way**: `src/proxy.ts`'s matcher
   excludes `/api` entirely (`(?!api|_next/static|...)`), so
   `/api/emails/drain` has always been a fully public, unauthenticated
@@ -30,10 +36,9 @@ Short log of features shipped and caveats to know about. Newest on top.
   (`CRON_SECRET`).
 - **Setup required**: `CRON_SECRET` must also be set as an env var on the
   actual Vercel project (not just `.env.local`) — Vercel then attaches it
-  automatically to cron-triggered requests. Also double-check the
-  configured Vercel plan's cron frequency limits before deploying; if
-  `*/5 * * * *` isn't accepted, Vercel's deploy step will say so and the
-  schedule can be relaxed (e.g. hourly) accordingly.
+  automatically to cron-triggered requests. If this project ever moves off
+  the Hobby plan, `0 3 * * *` can be tightened to something more frequent
+  (Pro allows arbitrary schedules, not just once-daily).
 
 ## Stale-match protection for inbox scanning
 
