@@ -17,11 +17,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { TemplateOption } from "@/components/template-picker";
-import { CONTACT_STATUSES } from "@/lib/contacts";
+import { getSelectableStatuses } from "@/lib/contacts";
 import { useDrainEmailQueue } from "@/hooks/use-drain-email-queue";
 
+import { InboxMatchesDialog } from "./inbox-matches-dialog";
 import { SendEmailDialog } from "./send-email-dialog";
-import { updateContactStatus } from "./actions";
+import { previewInboxMatches, updateContactStatus, type InboxMatch } from "./actions";
 
 export interface ContactRow {
   id: string;
@@ -48,6 +49,9 @@ export function ContactsTable({
   const router = useRouter();
   const [selectedRows, setSelectedRows] = useState<ContactRow[]>([]);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [checkingReplies, setCheckingReplies] = useState(false);
+  const [inboxMatches, setInboxMatches] = useState<InboxMatch[]>([]);
+  const [matchesDialogOpen, setMatchesDialogOpen] = useState(false);
   const { remaining, startDraining } = useDrainEmailQueue();
   const wasDraining = useRef(false);
 
@@ -63,6 +67,37 @@ export function ContactsTable({
 
   async function handleStatusChange(contactId: string, status: Contact["status"]) {
     await updateContactStatus(contactId, status);
+    router.refresh();
+  }
+
+  async function handleCheckReplies() {
+    setCheckingReplies(true);
+    try {
+      const { matches } = await previewInboxMatches();
+      if (matches.length === 0) {
+        toast.success("No updates found");
+      } else {
+        setInboxMatches(matches);
+        setMatchesDialogOpen(true);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not check for replies");
+    } finally {
+      setCheckingReplies(false);
+    }
+  }
+
+  function handleMatchesApplied({
+    repliedCount,
+    bouncedCount,
+  }: {
+    repliedCount: number;
+    bouncedCount: number;
+  }) {
+    const parts = [];
+    if (repliedCount > 0) parts.push(`${repliedCount} replied`);
+    if (bouncedCount > 0) parts.push(`${bouncedCount} bounced`);
+    toast.success(parts.join(", "));
     router.refresh();
   }
 
@@ -107,26 +142,29 @@ export function ContactsTable({
         accessorKey: "status",
         header: "Status",
         meta: { filterVariant: "text" },
-        cell: ({ row }) => (
-          <Select
-            value={row.original.status}
-            onValueChange={(value) =>
-              value && handleStatusChange(row.original.id, value as Contact["status"])
-            }
-            items={CONTACT_STATUSES}
-          >
-            <SelectTrigger size="sm" className="w-36">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {CONTACT_STATUSES.map((s) => (
-                <SelectItem key={s.value} value={s.value}>
-                  {s.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ),
+        cell: ({ row }) => {
+          const selectable = getSelectableStatuses(row.original.status);
+          return (
+            <Select
+              value={row.original.status}
+              onValueChange={(value) =>
+                value && handleStatusChange(row.original.id, value as Contact["status"])
+              }
+              items={selectable}
+            >
+              <SelectTrigger size="sm" className="w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {selectable.map((s) => (
+                  <SelectItem key={s.value} value={s.value}>
+                    {s.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          );
+        },
       },
       {
         accessorKey: "notes",
@@ -146,7 +184,10 @@ export function ContactsTable({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" onClick={handleCheckReplies} disabled={checkingReplies}>
+          {checkingReplies ? "Checking..." : "Check for replies"}
+        </Button>
         <Button
           onClick={() => setEmailDialogOpen(true)}
           disabled={selectedRows.length === 0}
@@ -166,6 +207,12 @@ export function ContactsTable({
         contacts={selectedRows}
         templates={templates}
         onQueued={startDraining}
+      />
+      <InboxMatchesDialog
+        open={matchesDialogOpen}
+        onOpenChange={setMatchesDialogOpen}
+        matches={inboxMatches}
+        onApplied={handleMatchesApplied}
       />
     </div>
   );

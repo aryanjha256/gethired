@@ -1,13 +1,17 @@
 "use server";
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 
 import { db } from "@/db";
 import { appSettings, companies, type Contact, contacts, emails, templates } from "@/db/schema";
 import { drainEmailQueue } from "@/lib/email-queue";
+import { ALLOWED_STATUS_TRANSITIONS } from "@/lib/contacts";
+import { scanInbox } from "@/lib/mailbox";
 import { renderTemplate, type TemplateContext } from "@/lib/templates";
+
+const REPLY_ELIGIBLE_STATUSES: Contact["status"][] = ["contacted", "followed_up"];
 
 const INITIAL_ELIGIBLE_STATUSES: Contact["status"][] = ["new", "no_opening"];
 const FOLLOW_UP_ELIGIBLE_STATUSES: Contact["status"][] = ["contacted", "followed_up"];
@@ -131,21 +135,129 @@ export async function enqueueContactEmails(
 }
 
 export async function updateContactStatus(contactId: string, status: Contact["status"]) {
-  await db.update(contacts).set({ status }).where(eq(contacts.id, contactId));
+  const [contact] = await db
+    .select({ status: contacts.status, companyId: contacts.companyId })
+    .from(contacts)
+    .where(eq(contacts.id, contactId));
+  if (!contact) return;
 
-  if (status === "no_opening") {
-    const [contact] = await db
-      .select({ companyId: contacts.companyId })
-      .from(contacts)
-      .where(eq(contacts.id, contactId));
+  // The Select on /contacts already only offers valid next statuses, but
+  // that's UX, not enforcement — this is the one place the rule is
+  // actually authoritative.
+  if (status !== contact.status && !ALLOWED_STATUS_TRANSITIONS[contact.status].includes(status)) {
+    throw new Error(`Cannot move a "${contact.status}" contact to "${status}"`);
+  }
 
-    if (contact?.companyId) {
-      await db
-        .update(companies)
-        .set({ noOpeningAt: new Date() })
-        .where(eq(companies.id, contact.companyId));
-    }
+  await db
+    .update(contacts)
+    .set({ status })
+    .where(and(eq(contacts.id, contactId), eq(contacts.status, contact.status)));
+
+  if (status === "no_opening" && contact.companyId) {
+    await db
+      .update(companies)
+      .set({ noOpeningAt: new Date() })
+      .where(eq(companies.id, contact.companyId));
   }
 
   revalidatePath("/contacts");
+}
+
+export interface InboxMatch {
+  id: string;
+  name: string | null;
+  email: string;
+  status: "replied" | "bounced";
+}
+
+// Best-effort reply + bounce detection: scans the sending inbox (via IMAP)
+// and reports matching contacts — does NOT write anything. The caller
+// (the "Check for replies" confirmation dialog) decides whether to apply
+// these via applyInboxMatches. Address-match only, no Message-ID threading
+// — scoping "replied" to REPLY_ELIGIBLE_STATUSES keeps it safe (a contact
+// who never got an email can't match, and one already past this stage
+// won't get re-matched on a later scan). "Bounced" is scoped to anything
+// not already closed/bounced — see the plan notes on why
+// interviewing/replied aren't excluded from that (accepted edge case, not
+// a gap).
+//
+// A match is also dropped if the inbox message predates the most recent
+// email actually sent to that contact — otherwise a stale reply/bounce
+// still sitting in the 30-day window (e.g. from an earlier dev-testing
+// round) could re-match after a contact's status gets reset. If there's no
+// "sent" row for the contact at all, the match is dropped too, not allowed
+// through: contacts.id is a fresh UUID on every import, so a contact
+// re-imported after the DB was wiped/reset always starts with zero `emails`
+// history — there's nothing for a leftover inbox message to legitimately
+// correlate to, even though the same address may have been emailed before
+// the reset.
+export async function previewInboxMatches(): Promise<{ matches: InboxMatch[] }> {
+  const { repliedAddresses, bouncedAddresses } = await scanInbox();
+  if (repliedAddresses.size === 0 && bouncedAddresses.size === 0) {
+    return { matches: [] };
+  }
+
+  const candidates = await db
+    .select({ id: contacts.id, name: contacts.name, email: contacts.email, status: contacts.status })
+    .from(contacts);
+
+  const lastSentRows = await db
+    .select({
+      contactId: emails.contactId,
+      lastSentAt: sql<Date>`max(${emails.createdAt})`.as("lastSentAt"),
+    })
+    .from(emails)
+    .where(eq(emails.status, "sent"))
+    .groupBy(emails.contactId);
+  const lastSentByContactId = new Map(
+    lastSentRows.filter((row) => row.contactId).map((row) => [row.contactId as string, row.lastSentAt]),
+  );
+
+  function isFreshMatch(contactId: string, messageDate: Date | undefined) {
+    const lastSentAt = lastSentByContactId.get(contactId);
+    if (!lastSentAt) return false;
+    return !messageDate || messageDate > lastSentAt;
+  }
+
+  const replied = candidates.filter(
+    (contact) =>
+      REPLY_ELIGIBLE_STATUSES.includes(contact.status) &&
+      repliedAddresses.has(contact.email.toLowerCase()) &&
+      isFreshMatch(contact.id, repliedAddresses.get(contact.email.toLowerCase())),
+  );
+  const repliedIds = new Set(replied.map((contact) => contact.id));
+
+  const bounced = candidates.filter(
+    (contact) =>
+      !ALWAYS_BLOCKED_STATUSES.includes(contact.status) &&
+      !repliedIds.has(contact.id) &&
+      bouncedAddresses.has(contact.email.toLowerCase()) &&
+      isFreshMatch(contact.id, bouncedAddresses.get(contact.email.toLowerCase())),
+  );
+
+  const matches: InboxMatch[] = [
+    ...replied.map((c) => ({ id: c.id, name: c.name, email: c.email, status: "replied" as const })),
+    ...bounced.map((c) => ({ id: c.id, name: c.name, email: c.email, status: "bounced" as const })),
+  ];
+
+  return { matches };
+}
+
+// Commits a set of matches the user has reviewed and confirmed in the
+// "Check for replies" dialog.
+export async function applyInboxMatches(matches: Pick<InboxMatch, "id" | "status">[]) {
+  const repliedIds = matches.filter((m) => m.status === "replied").map((m) => m.id);
+  const bouncedIds = matches.filter((m) => m.status === "bounced").map((m) => m.id);
+
+  if (repliedIds.length > 0) {
+    await db.update(contacts).set({ status: "replied" }).where(inArray(contacts.id, repliedIds));
+  }
+  if (bouncedIds.length > 0) {
+    await db.update(contacts).set({ status: "bounced" }).where(inArray(contacts.id, bouncedIds));
+  }
+  if (repliedIds.length > 0 || bouncedIds.length > 0) {
+    revalidatePath("/contacts");
+  }
+
+  return { repliedCount: repliedIds.length, bouncedCount: bouncedIds.length };
 }

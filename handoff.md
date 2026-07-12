@@ -2,6 +2,215 @@
 
 Short log of features shipped and caveats to know about. Newest on top.
 
+## Stale-match protection for inbox scanning
+
+- **What**: a match is now dropped if the inbox message predates the most
+  recent email actually sent to that contact. Addresses the concern that,
+  especially during dev/testing (repeated sends + status resets to the
+  same test contact), a stale reply/bounce still sitting inside the
+  30-day scan window could re-match after a contact's status was reset —
+  since the scan previously had no memory of what it had already
+  considered, only "does this contact's current status make it eligible."
+- **Why not Message-ID threading instead**: that would solve this too, but
+  needs a schema change (`emails.messageId`), parsing `In-Reply-To` off
+  replies, and — for bounces — locating a second embedded MIME part inside
+  the DSN to recover the original message's Message-ID. The actual problem
+  here doesn't need precise per-email correlation, just "is this newer
+  than the last thing we sent" — a plain date comparison, no schema change.
+- **Files**:
+  - `src/lib/mailbox.ts` — `scanInbox()`'s return type changed from
+    `Set<string>` to `Map<string, Date | undefined>` for both
+    `repliedAddresses`/`bouncedAddresses`, keeping the *latest* message
+    date seen per address (`keepLatest()`). Threaded through all three
+    fetch passes: reply dates come straight off Pass 1's envelope; bounce
+    dates are captured in Pass 1 (`bounceCandidateDates`, keyed by uid,
+    since Pass 1 is the only pass that fetches envelope) and matched back
+    up to the extracted address in Pass 3.
+  - `src/app/(app)/contacts/actions.ts` — `previewInboxMatches()` now also
+    queries `max(emails.created_at)` grouped by `contactId` (`status =
+    'sent'` only) to get each contact's last-sent timestamp, and an
+    `isFreshMatch()` check requires the matched message's date to be
+    *after* that.
+- **Corrected after further discussion**: the first version of
+  `isFreshMatch()` *allowed* a match through when there was no `sent` row
+  for the contact at all ("no baseline to compare against"). That's
+  backwards for this app's actual dev workflow — `contacts.id` is a fresh
+  UUID on every import, so a contact re-imported after the DB is
+  wiped/reset for testing always starts with zero `emails` history, no
+  matter how many times that same address was emailed before the reset.
+  The permissive default meant a stale inbox message could immediately
+  mismatch onto a freshly re-imported contact — worst case for bounces
+  specifically, since bounce-matching (unlike replies) doesn't require the
+  contact to already be `contacted`/`followed_up`, so a brand-new `status:
+  "new"` import could get wrongly marked `bounced` on the very first
+  "Check for replies" click. Flipped to the opposite default: no `sent` row
+  for this contact row means nothing to correlate the message to, so the
+  match is dropped. Known trade-off, stated plainly: a contact whose only
+  send attempt genuinely failed (`emails.status` stuck at `"failed"`, never
+  reaching `"sent"`) can never match a reply/bounce either, even if one
+  legitimately arrives — accepted as reasonable, since this app never
+  actually confirmed sending them anything in the first place.
+
+## Constrained status transitions + confirm-before-apply for inbox matches
+
+- **What**: two gaps closed together. (1) The inline status `Select` on
+  `/contacts` used to let any contact jump to any other status
+  (`closed` → `new`, `bounced` → `interviewing`, anything) — now each
+  status only offers its logical next steps, matching the lifecycle logic
+  already assumed everywhere else in this app. (2) "Check for replies"
+  used to scan the inbox and immediately write `replied`/`bounced` status
+  changes with zero review step — it now shows a confirmation dialog
+  listing exactly which contacts matched and what they'd become, and only
+  writes anything once you click Apply.
+- **Status transitions** (`src/lib/contacts.ts`):
+  `ALLOWED_STATUS_TRANSITIONS` (a `Record<status, status[]>`) plus
+  `getSelectableStatuses(current)` (returns `current` + its allowed next
+  statuses, filtered from `CONTACT_STATUSES` — feeds both the `Select`'s
+  `items` prop and its `SelectContent` children in
+  `src/app/(app)/contacts/contacts-table.tsx`). `closed` is reachable from
+  every non-closed status (the universal "give up" escape hatch);
+  `no_opening`'s only manual forward move is `closed` — its actual
+  re-eligibility for a fresh `initial` send is already automatic via the
+  company cooldown, not something a manual status change should trigger.
+  **Enforced server-side too**, not just in the `Select`'s options:
+  `updateContactStatus` (`src/app/(app)/contacts/actions.ts`) now fetches
+  the contact's current status first, throws if the requested status isn't
+  in `ALLOWED_STATUS_TRANSITIONS[current]`, and only then applies the
+  update guarded by `WHERE status = <status just read>` — same
+  read-then-guarded-write pattern already used for the automatic
+  `contacted`/`followed_up` advances in `enqueueContactEmails`. The client
+  restriction is UX; this is where the rule is actually authoritative.
+- **Confirm-before-apply**: `checkForReplies()` is gone, split into
+  `previewInboxMatches()` (runs `scanInbox()` + the same matching logic as
+  before, returns the matches instead of writing them) and
+  `applyInboxMatches(matches)` (the actual bulk updates, called only when
+  the user clicks Apply). New
+  `src/app/(app)/contacts/inbox-matches-dialog.tsx` shows the match list —
+  same capped-height `Dialog` + `ScrollArea` pattern as
+  `send-email-dialog.tsx` (header/footer pinned, only the list scrolls).
+  No per-row include/exclude checkboxes — Apply commits the whole batch,
+  Cancel discards it.
+- **Files**: `src/lib/contacts.ts`, `src/app/(app)/contacts/actions.ts`,
+  `src/app/(app)/contacts/contacts-table.tsx`,
+  `src/app/(app)/contacts/inbox-matches-dialog.tsx` (new).
+- **Explicitly deferred**: no per-row selection inside the confirmation
+  dialog (whole-batch Apply/Cancel only); no change to the IMAP matching
+  heuristics themselves, this was purely about what happens after matches
+  are found and about constraining manual edits.
+
+## Auto-detect replies AND bounces via IMAP ("Check for replies")
+
+- **Correctness improvement**: `extractBouncedAddress` (`src/lib/mailbox.ts`)
+  now reads the DSN's `Action:` field and only treats `Action: failed` as a
+  real bounce — `Action: delayed` (Gmail still retrying, not a permanent
+  failure) no longer gets misreported as `bounced`. Same downloaded
+  delivery-status text we already parse for `Final-Recipient`, just one
+  more regex — no schema change, no new file.
+- **Fixed after initial ship (2nd round)**: bounce classification in
+  `scanInbox()` (`src/lib/mailbox.ts`) originally OR'd a sender check
+  (`mailer-daemon`/`postmaster`) with a subject regex
+  (`delivery failure|undelivered|returned mail|...`). That subject regex is
+  exactly the wording that shows up in a normal inbox's years of unrelated
+  e-commerce/shipping emails ("Your delivery failed, we'll retry", "Item
+  undelivered"). Every false-positive match still paid for the expensive
+  part — a real `bodyStructure` fetch plus a sequential, awaited
+  `download()` — before finding no `message/delivery-status` part and
+  giving up. That's what made "Check for replies" noticeably slower after
+  bounce detection was added, scaling with however many unrelated
+  "delivery"/"failure"-worded emails happened to be in the 30-day window.
+  Fixed by dropping the subject check entirely — every bounce this app will
+  ever see is relayed through Gmail's own `mailer-daemon@` address (a
+  strict, universal MTA convention), so the sender check alone is both
+  sufficient and precise, with no false-positive cost.
+- **Fixed after initial ship (1st round)**: the first version of `scanInbox()` called
+  `client.download()` (for the bounce delivery-status part) *from inside*
+  the `for await` loop still consuming `client.fetch()`'s results —
+  issuing a second IMAP command while the first was still streaming. That
+  caused a 500 and a ~5 minute hang on a single scan. Fixed by splitting
+  into three fully-sequential passes in `src/lib/mailbox.ts`: (1) envelope
+  only, for every message in the window, to classify bounce-shaped vs.
+  everything else; (2) `bodyStructure` only for the small bounce-shaped
+  subset; (3) `download()` per candidate — each pass's `for await` loop
+  fully drains before the next command is issued. This also fixed a real
+  performance problem beyond the interleaving bug: the original version
+  fetched `bodyStructure` for *every* message in the 30-day window, not
+  just bounce candidates, which is unnecessarily heavy on a real inbox
+  with hundreds of unrelated emails in that period.
+- **What**: one button on `/contacts` ("Check for replies", next to "Send
+  Email", not tied to row selection) now detects both outcomes in a single
+  inbox scan: a real reply flips a contact to `replied`; a genuine bounce
+  notice flips it to `bounced`. `contacted`/`followed_up` were already
+  fully automatic (advance synchronously at enqueue time) — this closes
+  the other two manual-tracking gaps that don't scale at 50–100 sends/day.
+  Bounce detection was originally deferred as "too inconsistent to parse
+  reliably," but that concern turned out to be about *other* providers'
+  bounce formats — Gmail's own bounces (which is what actually lands in
+  this inbox, regardless of who rejected the message) are consistent RFC
+  3464 DSNs, which made this tractable without a second package.
+- **Why IMAP, and why it's safe re: architecture**: this app is SMTP-only
+  (send). Gmail app passwords work for both SMTP and IMAP, so this reuses
+  the existing `SMTP_USER`/`SMTP_PASSWORD` — no new provider, no new
+  credential type, just IMAP host/port added.
+- **Matching heuristic — deliberately simple, and deliberately not using
+  Message-ID**: no Message-ID/In-Reply-To threading for either replies or
+  bounces. For replies, plain `From`-address matching against
+  `contacts.email` already works with no reported false positives, scoped
+  to contacts currently `contacted`/`followed_up` (self-limiting on repeat
+  checks — a contact who flips to `replied` falls out of that set). For
+  bounces, Gmail's bounce DSN already hands us the failed address directly
+  via its `Final-Recipient: rfc822;<address>` field inside the standard
+  `message/delivery-status` MIME part — no need to correlate back to a
+  specific sent message at all, so there was never a reason to add an
+  `emails.messageId` column for this.
+- **Known trade-off**: bounce-matching excludes only `closed`/`bounced`
+  contacts, not `interviewing`/`replied` — if an already-engaged contact's
+  address somehow bounces on a later send, this would overwrite that more
+  valuable status with `bounced`. Accepted as unlikely in practice (you're
+  not sending automated cold outreach to someone you're already
+  interviewing with).
+- **Files**:
+  - `src/lib/mailbox.ts` — `scanInbox()` (replaces the earlier
+    `findRecentInboxSenders()`). Same connect/lock/search-last-30-days
+    shape as before, but now fetches `bodyStructure` alongside `envelope`
+    in the same pass and classifies each message: sender/subject matching
+    `BOUNCE_SENDER_PATTERN`/`BOUNCE_SUBJECT_PATTERN` → bounce candidate
+    (never also counted as a reply); everything else → reply candidate.
+    `findDeliveryStatusPart()` recurses `bodyStructure.childNodes` for the
+    `message/delivery-status` node; `extractBouncedAddress()` downloads
+    just that one MIME part via `client.download(uid, part, { uid: true
+    })`, reads it with the built-in `node:stream/consumers` `text()`
+    helper (no new dependency), and regexes out `Final-Recipient`.
+    Best-effort throughout — a message with no such part is silently
+    skipped, not an error.
+  - `src/app/(app)/contacts/actions.ts` — `checkForReplies()` (name kept
+    as-is; the button already called it, no reason to rename what's
+    otherwise unchanged from the caller's side) now pulls `status` for
+    every contact once, filters in plain JS into `repliedIds`/`bouncedIds`
+    (a contact can't land in both — `bouncedIds` explicitly excludes
+    anything already in `repliedIds`), and issues one bulk update per
+    outcome. Returns `{ repliedCount, bouncedCount }`.
+  - `src/app/(app)/contacts/contacts-table.tsx` — toast now reports both
+    counts (e.g. "2 replied, 1 bounced"), same
+    toast-then-`router.refresh()` pattern as `handleStatusChange`.
+  - `.env.example` / `.env.local` — `IMAP_HOST=imap.gmail.com`,
+    `IMAP_PORT=993` (added when the reply-only version first shipped,
+    unchanged here).
+- **Setup required**: `npm install imapflow` already run (verified: no new
+  vulnerabilities beyond this project's existing pre-accepted ones —
+  esbuild/drizzle-kit, postcss/next, xlsx). **Gmail also requires IMAP to be
+  turned on separately** in Gmail Settings → Forwarding and POP/IMAP — an
+  app password alone doesn't enable IMAP access. (In practice this worked
+  even before that setting was toggled — likely because app-password API
+  access isn't gated the same way a full IMAP client sync is — but the
+  setting is still the documented/supported path.)
+- **Explicitly deferred**: fallback bounce-address extraction beyond the
+  standard `message/delivery-status` part (e.g. parsing the embedded
+  original message's `To:` header when a bounce is non-standard); any
+  automatic/scheduled trigger (this app has no background worker or cron —
+  manual button only); a persisted "last checked" timestamp (each check
+  just re-scans a fixed 30-day window, which is simpler and already safe
+  against re-matching on repeat runs).
+
 ## Theme toggle
 
 - **What**: `src/components/theme-toggle.tsx` — a Light/Dark/System dropdown
