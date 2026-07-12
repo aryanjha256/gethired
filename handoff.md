@@ -2,6 +2,42 @@
 
 Short log of features shipped and caveats to know about. Newest on top.
 
+## Fixed the build-blocking pre-existing errors (they were dismissed as harmless all session — they weren't)
+
+- **What happened**: the first real Vercel deploy attempt failed at
+  `next build`'s TypeScript step on `src/components/ui/spinner.tsx` — an
+  error that had shown up in every single `npx tsc --noEmit` run this
+  entire session and was repeatedly noted as "pre-existing, unrelated."
+  That was true in the narrow sense (none of this session's changes caused
+  it), but wrong in the sense that mattered: `next build` runs its own
+  TypeScript and ESLint gates and fails the build on real errors, unlike
+  a bare `tsc --noEmit` invocation that's easy to skim past in a terminal.
+  All three pre-existing errors (`spinner.tsx`'s type error, plus the two
+  `react-hooks/set-state-in-effect` errors in `carousel.tsx` and
+  `use-mobile.ts` that would very likely have blocked the *next* deploy
+  attempt right after) are now actually fixed, not just noted.
+- **`spinner.tsx`**: `React.ComponentProps<"svg">` types `strokeWidth` as
+  `string | number`, but `HugeiconsIcon`'s own `strokeWidth` prop only
+  accepts `number`. `Spinner` always hardcodes `strokeWidth={2}` itself —
+  no caller overrides it (checked both usages) — so the fix is
+  `Omit<React.ComponentProps<"svg">, "strokeWidth">` on the accepted props,
+  not loosening `HugeiconsIcon`'s type.
+- **`carousel.tsx`** and **`use-mobile.ts`**: both were the classic
+  "derive React state from an external, event-emitting API via
+  `useState` + `useEffect(() => setState(...))`" pattern — Embla's
+  carousel `api` object in one case, `window.matchMedia` in the other.
+  Rewritten using `React.useSyncExternalStore`, the primitive actually
+  designed for "subscribe to an external mutable source, read a
+  synchronized snapshot" — no effect-calling-setState involved at all, so
+  there's nothing for the lint rule to flag. Behavior is unchanged in both
+  cases (same events subscribed to, same derived boolean values, same SSR
+  fallback of `false`).
+- **Verification**: `npx tsc --noEmit` is now completely silent (first
+  time all session), `npm run lint` reports 0 errors (down from 2, the
+  remaining 5 are non-blocking warnings), and a full local
+  `npm run build` succeeds end-to-end — the same build Vercel's pipeline
+  runs.
+
 ## Vercel Cron backstop for the email queue
 
 - **What**: `POST /api/emails/drain` was only ever triggered by the
