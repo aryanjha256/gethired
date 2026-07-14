@@ -55,11 +55,7 @@ function detectColumnType(values: SpreadsheetCell[]): ColumnType {
   return "string"
 }
 
-export async function parseSpreadsheetFile(
-  file: File
-): Promise<ParsedSpreadsheet> {
-  const buffer = await file.arrayBuffer()
-  const workbook = XLSX.read(buffer, { type: "array", cellDates: true })
+function workbookToParsed(workbook: XLSX.WorkBook): ParsedSpreadsheet {
   const sheet = workbook.Sheets[workbook.SheetNames[0]]
   const rows = XLSX.utils.sheet_to_json<Record<string, SpreadsheetCell>>(
     sheet,
@@ -72,6 +68,23 @@ export async function parseSpreadsheetFile(
   }))
 
   return { columns, rows }
+}
+
+export async function parseSpreadsheetFile(
+  file: File
+): Promise<ParsedSpreadsheet> {
+  const buffer = await file.arrayBuffer()
+  const workbook = XLSX.read(buffer, { type: "array", cellDates: true })
+  return workbookToParsed(workbook)
+}
+
+export function parseSpreadsheetText(text: string): ParsedSpreadsheet {
+  const trimmed = text.trim()
+  if (!trimmed) {
+    return { columns: [], rows: [] }
+  }
+  const workbook = XLSX.read(trimmed, { type: "string", cellDates: true })
+  return workbookToParsed(workbook)
 }
 
 export function serializeSpreadsheetRow(
