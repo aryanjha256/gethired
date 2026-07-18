@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { TemplateOption } from "@/components/template-picker";
-import { getSelectableStatuses } from "@/lib/contacts";
+import { CONTACT_STATUSES, getSelectableStatuses } from "@/lib/contacts";
 import { useDrainEmailQueue } from "@/hooks/use-drain-email-queue";
 
 import { InboxMatchesDialog } from "./inbox-matches-dialog";
@@ -141,7 +141,7 @@ export function ContactsTable({
       {
         accessorKey: "status",
         header: "Status",
-        meta: { filterVariant: "text" },
+        meta: { filterVariant: "enum", filterOptions: CONTACT_STATUSES },
         cell: ({ row }) => {
           const selectable = getSelectableStatuses(row.original.status);
           return (

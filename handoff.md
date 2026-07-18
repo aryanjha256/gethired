@@ -2,6 +2,13 @@
 
 Short log of features shipped and caveats to know about. Newest on top.
 
+## DataTable enum filter support
+
+- **What**: added an incremental `filterVariant: "enum"` option to the reusable `DataTable` filter abstraction. Enum filters render as a shadcn/Base UI `Select` using `columnDef.meta.filterOptions`, and filter with an exact value match instead of freeform text contains matching.
+- **Contacts usage**: `/contacts` now marks the `status` column as an enum filter and reuses `CONTACT_STATUSES` for its filter dropdown options. The inline status update select remains unchanged and still uses `getSelectableStatuses()` for transition-safe options.
+- **Fix note**: the empty enum value is represented as `null`, not `undefined`, so Base UI `Select` stays controlled from the first render and does not emit controlled/uncontrolled warnings.
+- **Caveat**: enum filters are currently single-select only. Multi-select/status groups can be added later without disturbing the existing text/number/date variants.
+
 ## Fixed the build-blocking pre-existing errors (they were dismissed as harmless all session — they weren't)
 
 - **What happened**: the first real Vercel deploy attempt failed at

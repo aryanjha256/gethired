@@ -1,17 +1,26 @@
 import type { FilterFn, RowData } from "@tanstack/react-table"
 
+export interface DataTableFilterOption {
+  value: string
+  label: string
+}
+
 declare module "@tanstack/react-table" {
+  // TanStack requires this merged interface to keep its original type parameters.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface ColumnMeta<TData extends RowData, TValue> {
-    filterVariant?: "text" | "number" | "date"
+    filterVariant?: "text" | "number" | "date" | "enum"
+    filterOptions?: DataTableFilterOption[]
   }
   interface FilterFns {
     textFilter: FilterFn<unknown>
     numberFilter: FilterFn<unknown>
     dateFilter: FilterFn<unknown>
+    enumFilter: FilterFn<unknown>
   }
 }
 
-export type FilterVariant = "text" | "number" | "date"
+export type FilterVariant = "text" | "number" | "date" | "enum"
 
 export interface TextFilterValue {
   operator: "contains"
@@ -30,20 +39,27 @@ export interface DateFilterValue {
   value2?: string
 }
 
+export interface EnumFilterValue {
+  value: string | null
+}
+
 export function defaultFilterValue(variant: FilterVariant) {
   if (variant === "number") return { operator: "eq" } satisfies NumberFilterValue
   if (variant === "date") return { operator: "is" } satisfies DateFilterValue
+  if (variant === "enum") return { value: null } satisfies EnumFilterValue
   return { operator: "contains" } satisfies TextFilterValue
 }
 
 export function filterFnForVariant(
   variant: FilterVariant
-): "numberFilter" | "dateFilter" | "textFilter" {
+): "numberFilter" | "dateFilter" | "enumFilter" | "textFilter" {
   return variant === "number"
     ? "numberFilter"
     : variant === "date"
       ? "dateFilter"
-      : "textFilter"
+      : variant === "enum"
+        ? "enumFilter"
+        : "textFilter"
 }
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
@@ -110,4 +126,16 @@ const dateFilter: FilterFn<unknown> = (row, columnId, filterValue) => {
 dateFilter.autoRemove = (value: DateFilterValue) =>
   !value || (!value.value && !value.value2)
 
-export const dataTableFilterFns = { textFilter, numberFilter, dateFilter }
+const enumFilter: FilterFn<unknown> = (row, columnId, filterValue) => {
+  const { value } = (filterValue as EnumFilterValue) ?? {}
+  if (!value) return true
+  return String(row.getValue(columnId) ?? "") === value
+}
+enumFilter.autoRemove = (value: EnumFilterValue) => !value?.value
+
+export const dataTableFilterFns = {
+  textFilter,
+  numberFilter,
+  dateFilter,
+  enumFilter,
+}

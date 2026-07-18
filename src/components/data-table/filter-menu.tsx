@@ -26,6 +26,7 @@ import { DataTableDragHandle } from "./drag-handle"
 import {
   defaultFilterValue,
   type DateFilterValue,
+  type EnumFilterValue,
   type NumberFilterValue,
   type TextFilterValue,
 } from "./filter-fns"
@@ -263,6 +264,30 @@ function DataTableFilterValueEditor<TData, TValue>({
           />
         )}
       </div>
+    )
+  }
+
+  if (variant === "enum") {
+    const filterValue = (value as EnumFilterValue) ?? { value: null }
+    const options = column.columnDef.meta?.filterOptions ?? []
+
+    return (
+      <Select
+        value={filterValue.value ?? null}
+        onValueChange={(nextValue) => onChange({ value: nextValue ?? null })}
+        items={options}
+      >
+        <SelectTrigger size="sm" className="w-44">
+          <SelectValue placeholder="Select..." />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     )
   }
 
