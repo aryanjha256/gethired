@@ -3,6 +3,7 @@ import { asc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { appSettings, companies, contacts } from "@/db/schema";
 import { computeCooldownDaysLeft } from "@/lib/contacts";
+import { StatCard } from "@/components/stat-card";
 
 import { CompaniesTable } from "./companies-table";
 
@@ -36,14 +37,28 @@ export default async function CompaniesPage() {
     cooldownDaysLeft: computeCooldownDaysLeft(noOpeningAt, retryCooldownDays),
   }));
 
+  const totalContacts = data.reduce((sum, row) => sum + row.contactCount, 0);
+  const interviewingCompanies = data.filter((row) => row.interviewingCount > 0).length;
+  const inCooldown = data.filter(
+    (row) => row.cooldownDaysLeft != null && row.cooldownDaysLeft > 0,
+  ).length;
+
   return (
     <div className="flex flex-1 flex-col gap-4 p-6">
       <div>
         <h1 className="font-heading text-lg font-medium tracking-tight">Companies</h1>
         <p className="text-sm text-muted-foreground">
-          {data.length} compan{data.length === 1 ? "y" : "ies"}
+          Every organization you&apos;ve reached out to, with contact volume and outreach status.
         </p>
       </div>
+
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatCard label="Companies" value={data.length} />
+        <StatCard label="Contacts" value={totalContacts} />
+        <StatCard label="Interviewing" value={interviewingCompanies} />
+        <StatCard label="In cooldown" value={inCooldown} />
+      </div>
+
       <CompaniesTable data={data} />
     </div>
   );

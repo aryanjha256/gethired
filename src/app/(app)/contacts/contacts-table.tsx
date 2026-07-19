@@ -106,17 +106,17 @@ export function ContactsTable({
       {
         accessorKey: "name",
         header: "Name",
-        meta: { filterVariant: "text" },
+        meta: { filterVariant: "text", searchable: true },
       },
       {
         accessorKey: "email",
         header: "Email",
-        meta: { filterVariant: "text" },
+        meta: { filterVariant: "text", searchable: true },
       },
       {
         accessorKey: "companyName",
         header: "Company",
-        meta: { filterVariant: "text" },
+        meta: { filterVariant: "text", searchable: true },
         cell: ({ row }) => (
           <div className="flex items-center gap-1.5">
             <span>{row.original.companyName}</span>
@@ -131,12 +131,12 @@ export function ContactsTable({
       {
         accessorKey: "title",
         header: "Title",
-        meta: { filterVariant: "text" },
+        meta: { filterVariant: "text", searchable: true },
       },
       {
         accessorKey: "phone",
         header: "Phone",
-        meta: { filterVariant: "text" },
+        meta: { filterVariant: "text", searchable: true },
       },
       {
         accessorKey: "status",
@@ -199,6 +199,8 @@ export function ContactsTable({
         columns={columns}
         data={data}
         enableRowSelection
+        enableGlobalSearch
+        searchPlaceholder="Search contacts..."
         onSelectedRowsChange={setSelectedRows}
       />
       <SendEmailDialog

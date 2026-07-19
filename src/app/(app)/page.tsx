@@ -5,6 +5,7 @@ import { companies, contacts, emails } from "@/db/schema";
 import { buildDailySendCounts, buildStatusChartData } from "@/lib/dashboard";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatCard } from "@/components/stat-card";
 
 import { EmailsTrendChart } from "./emails-trend-chart";
 import { StatusBarChart } from "./status-bar-chart";
@@ -14,17 +15,6 @@ const TREND_DAYS = 14;
 // Every number here changes as soon as you import contacts or send emails,
 // so this must never be served from a stale build-time cache.
 export const dynamic = "force-dynamic";
-
-function StatCard({ label, value }: { label: string; value: number }) {
-  return (
-    <Card size="sm">
-      <CardContent>
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <p className="font-heading text-2xl font-medium tracking-tight">{value}</p>
-      </CardContent>
-    </Card>
-  );
-}
 
 export default async function DashboardPage() {
   const [

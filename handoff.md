@@ -2,6 +2,19 @@
 
 Short log of features shipped and caveats to know about. Newest on top.
 
+## Companies page made more informative
+
+- **What**: `/companies` was sparse (just a 4-column table). Added a stat-card row (Companies, Contacts, Interviewing, In cooldown) computed from the already-loaded rows — no extra queries. Enriched the table: Domain is now a clickable external link, added an Interviewing count column, and Status always renders a badge (`Interviewing` / `Cooldown (Nd)` / `Open`) instead of blank. Global search enabled (name + domain).
+- **Dedup**: the dashboard's inline `StatCard` was extracted to `src/components/stat-card.tsx` and is now shared by both the dashboard and companies pages (value accepts `number | string`).
+
+## DataTable global search box
+
+- **What**: added an opt-in global search box to the reusable `DataTable`. Enabled per table via a new `enableGlobalSearch` prop (default off, so existing tables are untouched) with an optional `searchPlaceholder`. The box lives on the right of the toolbar next to the View menu (`src/components/data-table/search.tsx`, a search-icon `Input` wired to TanStack's `globalFilter` state).
+- **Which columns match**: opt-in per column via `meta.searchable: true`. Only those columns get `enableGlobalFilter`, so IDs/status/hidden values don't accidentally match. Matching is done on the stringified cell value (`String(value).toLowerCase().includes(query)`), so it works for both text and number columns through one code path (`globalSearchFilterFn` in `filter-fns.ts`).
+- **Contacts usage**: `/contacts` now shows the search box (`Search contacts...`) scanning name, email, company, title, and phone.
+- **Type note**: `globalSearchFilterFn` is registered as a named filter fn (`globalSearch` in `dataTableFilterFns`/`FilterFns`) and referenced by string key rather than passed as an inline `FilterFn<unknown>` — passing the function directly collapsed the table's `TData` generic to `unknown` and broke column typing.
+- **Caveat**: search AND-composes with the per-column filter menu (both narrow the same row set). It's a client-side scan over already-loaded rows, not a server query.
+
 ## DataTable enum filter support
 
 - **What**: added an incremental `filterVariant: "enum"` option to the reusable `DataTable` filter abstraction. Enum filters render as a shadcn/Base UI `Select` using `columnDef.meta.filterOptions`, and filter with an exact value match instead of freeform text contains matching.

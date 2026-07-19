@@ -11,12 +11,16 @@ declare module "@tanstack/react-table" {
   interface ColumnMeta<TData extends RowData, TValue> {
     filterVariant?: "text" | "number" | "date" | "enum"
     filterOptions?: DataTableFilterOption[]
+    // Opt a column into the global search box. Works for text and number
+    // values alike since matching is done on the stringified cell value.
+    searchable?: boolean
   }
   interface FilterFns {
     textFilter: FilterFn<unknown>
     numberFilter: FilterFn<unknown>
     dateFilter: FilterFn<unknown>
     enumFilter: FilterFn<unknown>
+    globalSearch: FilterFn<unknown>
   }
 }
 
@@ -126,6 +130,17 @@ const dateFilter: FilterFn<unknown> = (row, columnId, filterValue) => {
 dateFilter.autoRemove = (value: DateFilterValue) =>
   !value || (!value.value && !value.value2)
 
+// Global search: matches when the stringified cell value contains the query.
+// TanStack invokes this once per globally-filterable column and keeps the row
+// if any column matches, so a single fn covers both text and number columns.
+export const globalSearchFilterFn: FilterFn<unknown> = (row, columnId, filterValue) => {
+  const query = String(filterValue ?? "").trim().toLowerCase()
+  if (!query) return true
+  const value = row.getValue(columnId)
+  if (value == null) return false
+  return String(value).toLowerCase().includes(query)
+}
+
 const enumFilter: FilterFn<unknown> = (row, columnId, filterValue) => {
   const { value } = (filterValue as EnumFilterValue) ?? {}
   if (!value) return true
@@ -138,4 +153,5 @@ export const dataTableFilterFns = {
   numberFilter,
   dateFilter,
   enumFilter,
+  globalSearch: globalSearchFilterFn,
 }

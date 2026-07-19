@@ -30,7 +30,11 @@ function CompanyStatusBadge({ row }: { row: CompanyRow }) {
     return <Badge variant="outline">Cooldown ({row.cooldownDaysLeft}d left)</Badge>;
   }
 
-  return null;
+  return (
+    <Badge variant="outline" className="text-muted-foreground">
+      Open
+    </Badge>
+  );
 }
 
 export function CompaniesTable({ data }: { data: CompanyRow[] }) {
@@ -39,18 +43,40 @@ export function CompaniesTable({ data }: { data: CompanyRow[] }) {
       {
         accessorKey: "name",
         header: "Company",
-        meta: { filterVariant: "text" },
+        meta: { filterVariant: "text", searchable: true },
       },
       {
         accessorKey: "domain",
         header: "Domain",
-        meta: { filterVariant: "text" },
-        cell: ({ getValue }) => getValue<string | null>() ?? "—",
+        meta: { filterVariant: "text", searchable: true },
+        cell: ({ getValue }) => {
+          const domain = getValue<string | null>();
+          if (!domain) return <span className="text-muted-foreground">—</span>;
+          return (
+            <a
+              href={`https://${domain}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            >
+              {domain}
+            </a>
+          );
+        },
       },
       {
         accessorKey: "contactCount",
         header: "Contacts",
         meta: { filterVariant: "number" },
+      },
+      {
+        accessorKey: "interviewingCount",
+        header: "Interviewing",
+        meta: { filterVariant: "number" },
+        cell: ({ getValue }) => {
+          const count = getValue<number>();
+          return count > 0 ? count : <span className="text-muted-foreground">—</span>;
+        },
       },
       {
         id: "status",
@@ -61,5 +87,12 @@ export function CompaniesTable({ data }: { data: CompanyRow[] }) {
     [],
   );
 
-  return <DataTable columns={columns} data={data} />;
+  return (
+    <DataTable
+      columns={columns}
+      data={data}
+      enableGlobalSearch
+      searchPlaceholder="Search companies..."
+    />
+  );
 }

@@ -29,16 +29,16 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import Image from "next/image";
 
 const navMain = [
-  { title: "Dashboard", url: "/", icon: DashboardSquare01Icon },
-  { title: "Contacts", url: "/contacts", icon: UserGroupIcon },
-  { title: "Companies", url: "/companies", icon: Building02Icon },
-  { title: "Templates", url: "/templates", icon: NoteEditIcon },
-  { title: "Import", url: "/import", icon: FileUploadIcon },
-  { title: "Test Email", url: "/test-email", icon: MailSend01Icon },
+  { title: "Dashboard", url: "/", icon: DashboardSquare01Icon, color: "text-sky-500" },
+  { title: "Contacts", url: "/contacts", icon: UserGroupIcon, color: "text-violet-500" },
+  { title: "Companies", url: "/companies", icon: Building02Icon, color: "text-amber-500" },
+  { title: "Templates", url: "/templates", icon: NoteEditIcon, color: "text-emerald-500" },
+  { title: "Import", url: "/import", icon: FileUploadIcon, color: "text-rose-500" },
+  { title: "Test Email", url: "/test-email", icon: MailSend01Icon, color: "text-cyan-500" },
 ];
 
 const navFooter = [
-  { title: "Settings", url: "/settings", icon: Settings01Icon },
+  { title: "Settings", url: "/settings", icon: Settings01Icon, color: "text-slate-500" },
 ];
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -74,7 +74,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     isActive={pathname === item.url}
                     tooltip={item.title}
                   >
-                    <HugeiconsIcon icon={item.icon} strokeWidth={2} />
+                    <HugeiconsIcon icon={item.icon} strokeWidth={2} className={item.color} />
                     <span>{item.title}</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -93,7 +93,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 isActive={pathname === item.url}
                 tooltip={item.title}
               >
-                <HugeiconsIcon icon={item.icon} strokeWidth={2} />
+                <HugeiconsIcon icon={item.icon} strokeWidth={2} className={item.color} />
                 <span>{item.title}</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
